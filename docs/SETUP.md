@@ -117,6 +117,8 @@ Os workflows deste repositorio usam `apikey` via variavel de ambiente. Garanta n
 - `EVOLUTION_API_KEY`
 - `EVOLUTION_INSTANCE`
 
+Se a instancia ainda nao existir, crie primeiro no manager da Evolution API (`http://localhost:8080/manager`) ou pela API HTTP antes de executar qualquer envio.
+
 ### OpenAI
 
 Se o workflow usar geracao de texto:
@@ -151,6 +153,8 @@ O script:
 - cria as abas `Leads`, `envios_log` e `envios_erros`
 - grava `LEADS_SHEET_ID` no `.env`
 - usa `saida/planilha_mestre_sem_duplicados.csv` como fonte padrao quando os CSVs legados de importacao nao existem
+
+Depois de importar `workflow_hogar_evolution.json`, selecione manualmente a credencial Google Sheets criada nos nodes correspondentes, porque o arquivo JSON entra com placeholder de credencial.
 
 ## 8. Primeiro teste
 

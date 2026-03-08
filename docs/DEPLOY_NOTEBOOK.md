@@ -121,6 +121,7 @@ Use:
 - client id web
 - client secret web
 - redirect URI `http://localhost:5678/rest/oauth2-credential/callback`
+- depois da importacao do workflow, abra os nodes Google Sheets e selecione a credencial criada, porque o JSON entra com placeholder de credencial
 
 #### Evolution API
 
@@ -128,6 +129,34 @@ Os workflows usam `apikey` via variavel de ambiente. Verifique:
 
 - `EVOLUTION_API_KEY`
 - `EVOLUTION_INSTANCE`
+
+Se a instancia ainda nao existir no notebook, crie e conecte antes do primeiro envio.
+
+Opcao 1: usar o manager da Evolution API em `http://localhost:8080/manager`.
+
+Opcao 2: usar a API diretamente. Fluxo minimo:
+
+1. criar a instancia
+2. gerar ou obter o QR code
+3. escanear no WhatsApp em `Aparelhos conectados`
+
+Exemplo de criacao da instancia:
+
+```powershell
+curl.exe -X POST http://localhost:8080/instance/create `
+  -H "apikey: SUA_API_KEY" `
+  -H "Content-Type: application/json" `
+  -d "{\"instanceName\":\"SUA_INSTANCIA\",\"qrcode\":true,\"integration\":\"WHATSAPP-BAILEYS\"}"
+```
+
+Exemplo para solicitar conexao/QR:
+
+```powershell
+curl.exe -X GET http://localhost:8080/instance/connect/SUA_INSTANCIA `
+  -H "apikey: SUA_API_KEY"
+```
+
+Se a resposta vier com `pairingCode` ou `code`, use esse retorno para concluir o pareamento do WhatsApp.
 
 #### OpenAI
 
@@ -184,6 +213,14 @@ docker compose up -d --force-recreate n8n
 ### Google OAuth falha
 
 Revise o redirect URI no Google Cloud e no n8n.
+
+### Evolution API sem instancia conectada
+
+Revise:
+
+- se `EVOLUTION_INSTANCE` no `.env` bate com a instancia criada
+- se a instancia foi realmente pareada no WhatsApp
+- se o `apikey` enviado e o mesmo definido no compose
 
 ### Workflow nao acha a planilha local
 
