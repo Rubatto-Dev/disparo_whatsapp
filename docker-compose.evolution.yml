@@ -1,0 +1,68 @@
+version: "3.9"
+
+services:
+  evolution_api:
+    image: atendai/evolution-api:latest
+    container_name: evolution_api
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    environment:
+      # --- Autenticação global da API ---
+      # Este valor vira o seu EVOLUTION_API_KEY
+      AUTHENTICATION_TYPE: apikey
+      AUTHENTICATION_API_KEY: hogar_evolution_key_2026
+      AUTHENTICATION_EXPOSE_IN_FETCH_INSTANCES: "true"
+
+      # --- Servidor ---
+      SERVER_PORT: 8080
+      SERVER_URL: http://localhost:8080
+
+      # --- Banco de dados (SQLite local, sem dependências externas) ---
+      DATABASE_ENABLED: "false"
+
+      # --- Redis (cache de sessões) ---
+      CACHE_REDIS_ENABLED: "true"
+      CACHE_REDIS_URI: redis://evolution_redis:6379
+      CACHE_REDIS_PREFIX_KEY: evolution
+      CACHE_REDIS_TTL: 604800
+
+      # --- WhatsApp / Sessões ---
+      DEL_INSTANCE: "false"
+      DEL_TEMP_INSTANCES: "false"
+
+      # --- Webhook global (opcional — n8n pode registrar por instância) ---
+      WEBHOOK_GLOBAL_ENABLED: "false"
+
+      # --- Logs ---
+      LOG_LEVEL: ERROR
+      LOG_COLOR: "true"
+
+    volumes:
+      - evolution_instances:/evolution/instances
+      - evolution_store:/evolution/store
+
+    networks:
+      - evolution_net
+
+    depends_on:
+      - evolution_redis
+
+  evolution_redis:
+    image: redis:7-alpine
+    container_name: evolution_redis
+    restart: unless-stopped
+    command: redis-server --appendonly yes
+    volumes:
+      - evolution_redis_data:/data
+    networks:
+      - evolution_net
+
+volumes:
+  evolution_instances:
+  evolution_store:
+  evolution_redis_data:
+
+networks:
+  evolution_net:
+    driver: bridge

@@ -1,0 +1,577 @@
+{
+  "name": "Campanha Mensagens Best Whip Leticia",
+  "nodes": [
+    {
+      "parameters": {
+        "formTitle": "Disparar Campanha de Ampolas",
+        "formDescription": "=Preencha os dados. Use {{nome}} para o nome e {{saudacao}} para variar o cumprimento automaticamente.",
+        "formFields": {
+          "values": [
+            {
+              "fieldLabel": "Texto da Promoção",
+              "fieldType": "textarea",
+              "placeholder": "=Oi {{nome}}! Promoção especial de ampolas hoje!",
+              "requiredField": true
+            },
+            {
+              "fieldLabel": "Imagem do Produto",
+              "fieldType": "file",
+              "acceptFileTypes": ".jpg,.jpeg,.png,.webp"
+            },
+            {
+              "fieldLabel": "ID da Campanha",
+              "placeholder": "campanha_2026_03_05",
+              "requiredField": true
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "node1",
+      "name": "Formulário da Campanha",
+      "type": "n8n-nodes-base.formTrigger",
+      "typeVersion": 2.5,
+      "position": [
+        160,
+        304
+      ],
+      "webhookId": "b44559c2-7ab1-44c6-8042-94621bcb8ec4"
+    },
+    {
+      "parameters": {
+        "jsCode": "const item = $input.first();\nconst promoText = item.json['Texto da Promoção'] || '';\nconst campaignId = (item.json['ID da Campanha'] || '').trim().replace(/\\s+/g, '_') || `campanha_${new Date().toISOString().split('T')[0]}`;\n\n// base64Image extraido pelo node anterior (extractFromFile)\nconst base64Image = item.json.base64Image || '';\nconst hasImage = base64Image.length > 100;\n\n// mimeType e fileName vem do binary metadata\nconst binaryMeta = item.binary && item.binary['Imagem_do_Produto'];\nconst mimeType = (binaryMeta && binaryMeta.mimeType) || 'image/jpeg';\nconst fileName = (binaryMeta && binaryMeta.fileName) || 'promo.jpg';\n\nconsole.log(`[${campaignId}] hasImage: ${hasImage} | fileName: ${fileName}`);\nreturn [{ json: { promoText, base64Image, mimeType, fileName, hasImage, campaignId } }];\n"
+      },
+      "id": "node_prep",
+      "name": "Preparar Campanha",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        464,
+        304
+      ]
+    },
+    {
+      "parameters": {
+        "url": "https://api.agendor.com.br/v3/people",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "filter[user_id]",
+              "value": "94815"
+            }
+          ]
+        },
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "Token d1447870-bbf4-47d6-a691-8bc25f46caec"
+            }
+          ]
+        },
+        "options": {
+          "pagination": {
+            "pagination": {
+              "paginationMode": "responseContainsNextURL",
+              "nextURL": "={{ $response.body.links?.next }}",
+              "paginationCompleteWhen": "other",
+              "completeExpression": "={{ !$response.body.links?.next }}"
+            }
+          }
+        }
+      },
+      "id": "node2",
+      "name": "Buscar Clientes no Agendor",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        688,
+        304
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const LETICIA_ID = 94815;\nconst all = $input.all();\nconst contacts = [];\n\nfor (const item of all) {\n  const data = item.json.data || [];\n  for (const c of data) {\n    if (c.ownerUser && c.ownerUser.id === LETICIA_ID && contacts.length < 200) {\n      contacts.push(c);\n    }\n  }\n}\n\nconsole.log('Contatos da Leticia encontrados: ' + contacts.length);\nreturn [{ json: { contacts } }];"
+      },
+      "id": "node_filtrar",
+      "name": "Filtrar Leticia",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        912,
+        304
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const campanha = $('Preparar Campanha').first().json;\nconst promoText = campanha.promoText;\nconst base64Image = campanha.base64Image;\nconst mimeType = campanha.mimeType;\nconst fileName = campanha.fileName;\nconst hasImage = campanha.hasImage;\nconst campaignId = campanha.campaignId;\n\nconst clients = $input.first().json.contacts || [];\nconst greetings = ['Oi', 'Olá', 'Oii', 'Oi, tudo bem?', 'Olá, tudo bom?'];\nconst result = [];\nlet noPhone = 0;\n\nfor (const client of clients) {\n  const fullName = client.name || '';\n  const firstName = fullName.split(' ')[0];\n\n  let phone = (client.contact && (client.contact.whatsapp || client.contact.mobile || client.contact.work)) || '';\n  phone = phone.replace(/\\D/g, '');\n  if (phone.length === 10 || phone.length === 11) phone = '55' + phone;\n  if (!phone || phone.length < 12) { noPhone++; continue; }\n\n  const saudacao = greetings[Math.floor(Math.random() * greetings.length)];\n  const message = promoText\n    .replace(/\\{\\{saudacao\\}\\}/gi, saudacao)\n    .replace(/\\{\\{nome\\}\\}/gi, firstName)\n    .replace(/\\{\\{nomeCompleto\\}\\}/gi, fullName);\n\n  result.push({ json: { name: fullName, phone, message, hasImage, base64Image, mimeType, fileName, campaignId } });\n}\n\nconsole.log(`Leticia: ${clients.length} | Sem tel: ${noPhone} | A enviar: ${result.length}`);\n\nif (result.length === 0) {\n  return [{ json: { _campaignDone: true, campaignId, message: 'Nenhum contato encontrado.' } }];\n}\n\nreturn result;"
+      },
+      "id": "node3",
+      "name": "Formatar Dados",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1136,
+        304
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 1
+          },
+          "conditions": [
+            {
+              "id": "done1",
+              "leftValue": "={{ $json._campaignDone }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "node_check_done",
+      "name": "Campanha Completa?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        1360,
+        304
+      ]
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "id": "node4",
+      "name": "Loop Clientes",
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [
+        1584,
+        464
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "chat-api",
+        "operation": "send-presence",
+        "instanceName": "best-whip-leticia",
+        "remoteJid": "={{ $json.phone }}",
+        "delay": 4000
+      },
+      "id": "node_presence",
+      "name": "Simular Digitando",
+      "type": "n8n-nodes-evolution-api.evolutionApi",
+      "typeVersion": 1,
+      "position": [
+        1808,
+        128
+      ],
+      "credentials": {
+        "evolutionApi": {
+          "id": "IyUWglvnwMLwzpgz",
+          "name": "Evolution account"
+        }
+      },
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "a1",
+              "name": "phone",
+              "value": "={{ $('Loop Clientes').item.json.phone }}",
+              "type": "string"
+            },
+            {
+              "id": "a2",
+              "name": "message",
+              "value": "={{ $('Loop Clientes').item.json.message }}",
+              "type": "string"
+            },
+            {
+              "id": "a3",
+              "name": "hasImage",
+              "value": "={{ $('Loop Clientes').item.json.hasImage }}",
+              "type": "boolean"
+            },
+            {
+              "id": "a4",
+              "name": "base64Image",
+              "value": "={{ $('Loop Clientes').item.json.base64Image }}",
+              "type": "string"
+            },
+            {
+              "id": "a5",
+              "name": "mimeType",
+              "value": "={{ $('Loop Clientes').item.json.mimeType }}",
+              "type": "string"
+            },
+            {
+              "id": "a6",
+              "name": "fileName",
+              "value": "={{ $('Loop Clientes').item.json.fileName }}",
+              "type": "string"
+            },
+            {
+              "id": "a7",
+              "name": "campaignId",
+              "value": "={{ $('Loop Clientes').item.json.campaignId }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "node_restore",
+      "name": "Restaurar Dados",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        2032,
+        464
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 1
+          },
+          "conditions": [
+            {
+              "id": "cond1",
+              "leftValue": "={{ $json.hasImage }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "node_if",
+      "name": "Tem Imagem?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        2256,
+        464
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "messages-api",
+        "operation": "send-image",
+        "instanceName": "best-whip-leticia",
+        "remoteJid": "={{ $json.phone }}",
+        "media": "={{ $json.base64Image }}",
+        "caption": "={{ $json.message }}",
+        "options_message": {
+          "delay": 1000
+        }
+      },
+      "id": "node5",
+      "name": "Enviar com Imagem",
+      "type": "n8n-nodes-evolution-api.evolutionApi",
+      "typeVersion": 1,
+      "position": [
+        2480,
+        320
+      ],
+      "credentials": {
+        "evolutionApi": {
+          "id": "IyUWglvnwMLwzpgz",
+          "name": "Evolution account"
+        }
+      },
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "resource": "messages-api",
+        "instanceName": "best-whip-leticia",
+        "remoteJid": "={{ $json.phone }}",
+        "messageText": "={{ $json.message }}",
+        "options_message": {
+          "delay": 1000
+        }
+      },
+      "id": "node_sendtext",
+      "name": "Enviar Texto",
+      "type": "n8n-nodes-evolution-api.evolutionApi",
+      "typeVersion": 1,
+      "position": [
+        2480,
+        608
+      ],
+      "credentials": {
+        "evolutionApi": {
+          "id": "IyUWglvnwMLwzpgz",
+          "name": "Evolution account"
+        }
+      },
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "jsCode": "const item = $input.first().json;\nconst restoreItem = $('Restaurar Dados').item.json;\nconst phone = restoreItem.phone;\nconst campaignId = restoreItem.campaignId;\n\nif (item.error) {\n  console.log(`⚠️ Envio falhou para: ${phone}`);\n} else {\n  console.log(`✓ Enviado: ${phone} | campanha: ${campaignId}`);\n}\n\nreturn $input.all();"
+      },
+      "id": "node_mark",
+      "name": "Marcar Enviado",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2704,
+        464
+      ],
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "amount": 40
+      },
+      "id": "node6",
+      "name": "Aguardar 40s",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        2928,
+        464
+      ],
+      "webhookId": "bed6315b-5e8d-4876-aed1-0f7844d5f215"
+    },
+    {
+      "parameters": {
+        "operation": "binaryToPropery",
+        "binaryPropertyName": "Imagem_do_Produto",
+        "destinationKey": "base64Image",
+        "options": {
+          "keepSource": "both"
+        }
+      },
+      "id": "node_extract",
+      "name": "Extrair Imagem Base64",
+      "type": "n8n-nodes-base.extractFromFile",
+      "typeVersion": 1.1,
+      "position": [
+        352,
+        304
+      ],
+      "continueOnFail": true
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Preparar Campanha": {
+      "main": [
+        [
+          {
+            "node": "Buscar Clientes no Agendor",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Buscar Clientes no Agendor": {
+      "main": [
+        [
+          {
+            "node": "Filtrar Leticia",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Formatar Dados": {
+      "main": [
+        [
+          {
+            "node": "Campanha Completa?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Campanha Completa?": {
+      "main": [
+        [],
+        [
+          {
+            "node": "Loop Clientes",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Loop Clientes": {
+      "main": [
+        [],
+        [
+          {
+            "node": "Simular Digitando",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Simular Digitando": {
+      "main": [
+        [
+          {
+            "node": "Restaurar Dados",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Restaurar Dados": {
+      "main": [
+        [
+          {
+            "node": "Tem Imagem?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Tem Imagem?": {
+      "main": [
+        [
+          {
+            "node": "Enviar com Imagem",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Enviar Texto",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Enviar com Imagem": {
+      "main": [
+        [
+          {
+            "node": "Marcar Enviado",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Enviar Texto": {
+      "main": [
+        [
+          {
+            "node": "Marcar Enviado",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Marcar Enviado": {
+      "main": [
+        [
+          {
+            "node": "Aguardar 40s",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Aguardar 40s": {
+      "main": [
+        [
+          {
+            "node": "Loop Clientes",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Filtrar Leticia": {
+      "main": [
+        [
+          {
+            "node": "Formatar Dados",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Formulário da Campanha": {
+      "main": [
+        [
+          {
+            "node": "Extrair Imagem Base64",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extrair Imagem Base64": {
+      "main": [
+        [
+          {
+            "node": "Preparar Campanha",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "America/Sao_Paulo",
+    "saveManualExecutions": true,
+    "saveExecutionProgress": true,
+    "callerPolicy": "workflowsFromSameOwner",
+    "availableInMCP": false
+  },
+  "versionId": "481f1eb6-cbdc-46a8-856e-0546e95b2265",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "c3c1bb94532b0e112757211b7025272f78bf91a9770f5a749c9d841168692eb6"
+  },
+  "id": "6uxalAhUIhR79Uss",
+  "tags": []
+}

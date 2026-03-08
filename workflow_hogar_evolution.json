@@ -1,0 +1,410 @@
+{
+  "name": "Hogar Luxo - Agente IA WhatsApp (Evolution)",
+  "nodes": [
+    {
+      "id": "node-manual-trigger",
+      "name": "Teste Manual",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [240, 300],
+      "parameters": {}
+    },
+    {
+      "id": "node-schedule-trigger",
+      "name": "Agendamento",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.1,
+      "position": [240, 480],
+      "disabled": true,
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "minutes",
+              "minutesInterval": 10
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "node-read-leads",
+      "name": "Ler Leads (Google Sheets)",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.4,
+      "position": [480, 300],
+      "parameters": {
+        "operation": "read",
+        "documentId": {
+          "__rl": true,
+          "value": "={{ $env.LEADS_SHEET_ID }}",
+          "mode": "id"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "={{ $env.LEADS_SHEET_NAME || 'Leads' }}",
+          "mode": "name"
+        },
+        "filtersUI": {},
+        "options": {}
+      },
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "SUBSTITUIR_PELO_ID_DA_CREDENCIAL",
+          "name": "Google Sheets OAuth2"
+        }
+      }
+    },
+    {
+      "id": "node-filter-leads",
+      "name": "Filtrar + Segmentar Leads",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [720, 300],
+      "parameters": {
+        "jsCode": "const seen = new Set();\nconst result = [];\n\nfor (const item of $input.all()) {\n  const d = item.json;\n\n  // Telefone obrigatorio\n  const tel = String(d.telefone || '').replace(/\\D/g, '');\n  if (!tel) continue;\n\n  // Consentimento obrigatorio\n  const optIn = String(d.opt_in || d.consentimento || d.consent || '').toLowerCase();\n  const hasConsent = ['sim', 'yes', 'true', '1'].includes(optIn);\n  if (!hasConsent) continue;\n\n  // Ja enviado: pular\n  const status = String(d.status_envio || '').toLowerCase();\n  if (status === 'enviado') continue;\n\n  // Deduplicacao por telefone dentro da execucao\n  if (seen.has(tel)) continue;\n  seen.add(tel);\n\n  // Segmento\n  const segmento = String(d.segmento || '').toLowerCase() || 'cliente';\n\n  // Clientes: exige alta renda ou perfil premium\n  if (segmento === 'cliente') {\n    const renda = parseFloat(String(d.renda_mensal || '0').replace(/[^\\d.,]/g, '').replace(',', '.')) || 0;\n    const perfil = String(d.perfil || '').toLowerCase();\n    const altaRenda = renda >= 10000\n      || perfil.includes('alto')\n      || perfil.includes('premium')\n      || perfil.includes('luxo')\n      || perfil.includes('vip');\n    if (!altaRenda) continue;\n  }\n\n  result.push({ json: { ...d, telefone_limpo: tel, segmento } });\n}\n\nreturn result;"
+      }
+    },
+    {
+      "id": "node-loop",
+      "name": "Loop Over Items",
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [960, 300],
+      "parameters": {
+        "batchSize": 20,
+        "options": {}
+      }
+    },
+    {
+      "id": "node-build-prompt",
+      "name": "Montar Prompt IA",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1200, 300],
+      "parameters": {
+        "jsCode": "const items = $input.all();\nconst result = [];\n\nfor (const item of items) {\n  const d = item.json;\n  const segmento = d.segmento || 'cliente';\n  const nome = d.nome || d.first_name || 'Cliente';\n  const imovel = d.nome_imovel || d.titulo_imovel || 'empreendimento exclusivo';\n  const bairro = d.bairro || d.regiao || 'regiao nobre';\n  const faixa = d.faixa_preco || d.orcamento || 'sob consulta';\n\n  let prompt;\n  if (segmento === 'corretor_parceiro') {\n    prompt = 'Escreva uma mensagem curta de WhatsApp (maximo 3 paragrafos) para um corretor parceiro chamado ' + nome + '. Apresente a oportunidade de parceria na venda do ' + imovel + ' em ' + bairro + ', faixa de preco ' + faixa + '. Tom profissional, direto e propositivo. Foco em comissao e exclusividade. Sem emojis excessivos.';\n  } else {\n    prompt = 'Escreva uma mensagem curta de WhatsApp (maximo 3 paragrafos) para um cliente chamado ' + nome + '. Apresente o imovel ' + imovel + ' no ' + bairro + ', faixa de investimento ' + faixa + '. Tom consultivo, elegante e personalizado. Desperte interesse sem pressao. Sem emojis excessivos.';\n  }\n\n  result.push({ json: { ...d, prompt_ia: prompt } });\n}\n\nreturn result;"
+      }
+    },
+    {
+      "id": "node-openai",
+      "name": "Gerar Mensagem IA",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1440, 300],
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.openai.com/v1/chat/completions",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $env.OPENAI_API_KEY }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ model: 'gpt-4o-mini', messages: [{ role: 'system', content: 'Voce e um especialista em vendas de imoveis de alto padrao. Escreva mensagens persuasivas, elegantes e personalizadas para WhatsApp.' }, { role: 'user', content: $json.prompt_ia }], max_tokens: 300, temperature: 0.7 }) }}",
+        "options": {}
+      },
+      "continueOnFail": true
+    },
+    {
+      "id": "node-prepare-msg",
+      "name": "Preparar Mensagem Final",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1680, 300],
+      "parameters": {
+        "jsCode": "// Recupera dados do lead (node anterior ao OpenAI)\nconst leadData = $('Montar Prompt IA').item.json;\nconst responseData = $input.item.json;\n\nlet mensagem = '';\n\ntry {\n  const choices = responseData.choices || [];\n  if (choices.length > 0) {\n    mensagem = (choices[0]?.message?.content || '').trim();\n  }\n} catch(e) {}\n\n// Fallback se IA falhar\nif (!mensagem) {\n  const nome = leadData.nome || leadData.first_name || 'Cliente';\n  const imovel = leadData.nome_imovel || leadData.titulo_imovel || 'imovel exclusivo';\n  const bairro = leadData.bairro ? ' em ' + leadData.bairro : '';\n\n  if (leadData.segmento === 'corretor_parceiro') {\n    mensagem = 'Ola ' + nome + '! Temos uma excelente oportunidade de parceria: ' + imovel + bairro + '. Vamos conversar sobre os detalhes e a comissao? Abraco!';\n  } else {\n    mensagem = 'Ola ' + nome + '! Tenho uma oportunidade especial para voce: ' + imovel + bairro + '. Gostaria de saber mais detalhes?';\n  }\n}\n\nreturn [{ json: { ...leadData, mensagem_final: mensagem } }];"
+      }
+    },
+    {
+      "id": "node-evolution-send",
+      "name": "Enviar WhatsApp (Evolution)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1920, 300],
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.EVOLUTION_BASE_URL }}/message/sendText/{{ $env.EVOLUTION_INSTANCE }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "apikey",
+              "value": "={{ $env.EVOLUTION_API_KEY }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "keypair",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "number",
+              "value": "={{ $json.telefone_limpo }}"
+            },
+            {
+              "name": "text",
+              "value": "={{ $json.mensagem_final }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "continueOnFail": true
+    },
+    {
+      "id": "node-classify",
+      "name": "Classificar Resultado Envio",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [2160, 300],
+      "parameters": {
+        "jsCode": "// Recupera dados completos do lead (antes do envio)\nconst leadData = $('Preparar Mensagem Final').item.json;\nconst responseData = $input.item.json;\n\n// Verifica se houve erro no HTTP Request\nconst hasError = !!$input.item.error || !!responseData.error || !!responseData.message && !responseData.key;\nconst envio_ok = !hasError;\n\n// Campos da resposta Evolution API\nconst key = responseData.key || {};\nconst provider_message_id = key.id || '';\nconst provider_status = responseData.status || (envio_ok ? 'PENDING' : 'ERROR');\n\nlet erro_envio = '';\nif (!envio_ok) {\n  erro_envio = ($input.item.error && $input.item.error.message)\n    || responseData.message\n    || responseData.error\n    || 'Erro desconhecido no envio';\n}\n\nreturn [{\n  json: {\n    ...leadData,\n    envio_ok,\n    envio_status: envio_ok ? 'enviado' : 'erro',\n    envio_em: new Date().toISOString(),\n    provider_message_id,\n    provider_status,\n    erro_envio\n  }\n}];"
+      }
+    },
+    {
+      "id": "node-update-status",
+      "name": "Atualizar Status Lead (Sheets)",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.4,
+      "position": [2400, 300],
+      "parameters": {
+        "operation": "appendOrUpdate",
+        "documentId": {
+          "__rl": true,
+          "value": "={{ $env.LEADS_SHEET_ID }}",
+          "mode": "id"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "={{ $env.LEADS_SHEET_NAME || 'Leads' }}",
+          "mode": "name"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "telefone": "={{ $json.telefone }}",
+            "status_envio": "={{ $json.envio_status }}",
+            "ultimo_envio_em": "={{ $json.envio_em }}",
+            "provider_message_id": "={{ $json.provider_message_id }}",
+            "provider_status": "={{ $json.provider_status }}",
+            "erro_envio": "={{ $json.erro_envio }}"
+          },
+          "matchingColumns": ["telefone"],
+          "schema": []
+        },
+        "options": {}
+      },
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "SUBSTITUIR_PELO_ID_DA_CREDENCIAL",
+          "name": "Google Sheets OAuth2"
+        }
+      }
+    },
+    {
+      "id": "node-if-ok",
+      "name": "Envio OK?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [2640, 300],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": false,
+            "leftValue": "",
+            "typeValidation": "loose"
+          },
+          "conditions": [
+            {
+              "id": "cond-envio-ok",
+              "leftValue": "={{ $json.envio_ok }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "node-log-success",
+      "name": "Registrar Log Sucesso (Sheets)",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.4,
+      "position": [2880, 180],
+      "parameters": {
+        "operation": "append",
+        "documentId": {
+          "__rl": true,
+          "value": "={{ $env.LEADS_SHEET_ID }}",
+          "mode": "id"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "={{ $env.LEADS_LOG_SHEET_NAME || 'envios_log' }}",
+          "mode": "name"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "data_hora": "={{ $json.envio_em }}",
+            "telefone": "={{ $json.telefone }}",
+            "nome": "={{ $json.nome }}",
+            "segmento": "={{ $json.segmento }}",
+            "lead_id": "={{ $json.lead_id }}",
+            "campanha_id": "={{ $json.campanha_id }}",
+            "imovel_id": "={{ $json.imovel_id }}",
+            "status": "enviado",
+            "provider_message_id": "={{ $json.provider_message_id }}",
+            "provider_status": "={{ $json.provider_status }}",
+            "mensagem": "={{ $json.mensagem_final }}"
+          },
+          "schema": []
+        },
+        "options": {}
+      },
+      "continueOnFail": true,
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "SUBSTITUIR_PELO_ID_DA_CREDENCIAL",
+          "name": "Google Sheets OAuth2"
+        }
+      }
+    },
+    {
+      "id": "node-log-error",
+      "name": "Registrar Log Erro (Sheets)",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.4,
+      "position": [2880, 420],
+      "parameters": {
+        "operation": "append",
+        "documentId": {
+          "__rl": true,
+          "value": "={{ $env.LEADS_SHEET_ID }}",
+          "mode": "id"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "={{ $env.LEADS_ERROR_SHEET_NAME || 'envios_erros' }}",
+          "mode": "name"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "data_hora": "={{ $json.envio_em }}",
+            "telefone": "={{ $json.telefone }}",
+            "nome": "={{ $json.nome }}",
+            "segmento": "={{ $json.segmento }}",
+            "lead_id": "={{ $json.lead_id }}",
+            "campanha_id": "={{ $json.campanha_id }}",
+            "imovel_id": "={{ $json.imovel_id }}",
+            "status": "erro",
+            "erro_envio": "={{ $json.erro_envio }}",
+            "provider_status": "={{ $json.provider_status }}",
+            "mensagem": "={{ $json.mensagem_final }}"
+          },
+          "schema": []
+        },
+        "options": {}
+      },
+      "continueOnFail": true,
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "SUBSTITUIR_PELO_ID_DA_CREDENCIAL",
+          "name": "Google Sheets OAuth2"
+        }
+      }
+    },
+    {
+      "id": "node-wait",
+      "name": "Espera Anti-RateLimit",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [3120, 300],
+      "parameters": {
+        "resume": "timeInterval",
+        "unit": "seconds",
+        "amount": 3
+      }
+    }
+  ],
+
+  "connections": {
+    "Teste Manual": {
+      "main": [[{ "node": "Ler Leads (Google Sheets)", "type": "main", "index": 0 }]]
+    },
+    "Agendamento": {
+      "main": [[{ "node": "Ler Leads (Google Sheets)", "type": "main", "index": 0 }]]
+    },
+    "Ler Leads (Google Sheets)": {
+      "main": [[{ "node": "Filtrar + Segmentar Leads", "type": "main", "index": 0 }]]
+    },
+    "Filtrar + Segmentar Leads": {
+      "main": [[{ "node": "Loop Over Items", "type": "main", "index": 0 }]]
+    },
+    "Loop Over Items": {
+      "main": [[{ "node": "Montar Prompt IA", "type": "main", "index": 0 }]]
+    },
+    "Montar Prompt IA": {
+      "main": [[{ "node": "Gerar Mensagem IA", "type": "main", "index": 0 }]]
+    },
+    "Gerar Mensagem IA": {
+      "main": [[{ "node": "Preparar Mensagem Final", "type": "main", "index": 0 }]]
+    },
+    "Preparar Mensagem Final": {
+      "main": [[{ "node": "Enviar WhatsApp (Evolution)", "type": "main", "index": 0 }]]
+    },
+    "Enviar WhatsApp (Evolution)": {
+      "main": [[{ "node": "Classificar Resultado Envio", "type": "main", "index": 0 }]]
+    },
+    "Classificar Resultado Envio": {
+      "main": [[{ "node": "Atualizar Status Lead (Sheets)", "type": "main", "index": 0 }]]
+    },
+    "Atualizar Status Lead (Sheets)": {
+      "main": [[{ "node": "Envio OK?", "type": "main", "index": 0 }]]
+    },
+    "Envio OK?": {
+      "main": [
+        [{ "node": "Registrar Log Sucesso (Sheets)", "type": "main", "index": 0 }],
+        [{ "node": "Registrar Log Erro (Sheets)", "type": "main", "index": 0 }]
+      ]
+    },
+    "Registrar Log Sucesso (Sheets)": {
+      "main": [[{ "node": "Espera Anti-RateLimit", "type": "main", "index": 0 }]]
+    },
+    "Registrar Log Erro (Sheets)": {
+      "main": [[{ "node": "Espera Anti-RateLimit", "type": "main", "index": 0 }]]
+    },
+    "Espera Anti-RateLimit": {
+      "main": [[{ "node": "Loop Over Items", "type": "main", "index": 0 }]]
+    }
+  },
+
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "saveManualExecutions": true,
+    "callerPolicy": "workflowsFromSameOwner",
+    "errorWorkflow": ""
+  },
+  "tags": []
+}

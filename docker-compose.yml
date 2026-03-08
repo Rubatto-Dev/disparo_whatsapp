@@ -1,0 +1,146 @@
+# Stack unificada: n8n + Evolution API + PostgreSQL + Redis
+# Todos na mesma rede para comunicacao interna via nome de servico.
+# Variaveis sensiveis ficam no arquivo .env (nao commitar).
+
+services:
+
+  # --- n8n ---
+  n8n:
+    image: n8nio/n8n:latest
+    container_name: n8n
+    restart: unless-stopped
+    ports:
+      - "5678:5678"
+    environment:
+      N8N_HOST: localhost
+      N8N_PORT: 5678
+      N8N_PROTOCOL: http
+      WEBHOOK_URL: http://localhost:5678/
+      GENERIC_TIMEZONE: America/Sao_Paulo
+      TZ: America/Sao_Paulo
+      N8N_BLOCK_ENV_ACCESS_IN_NODE: "false"
+      N8N_RESTRICT_FILE_ACCESS_TO: /data/saida;/home/node/.n8n-files
+
+      N8N_GOOGLE_OAUTH_REDIRECT_URI: ${N8N_GOOGLE_OAUTH_REDIRECT_URI:-http://localhost:5678/rest/oauth2-credential/callback}
+
+      GOOGLE_OAUTH_CLIENT_ID: ${GOOGLE_OAUTH_CLIENT_ID}
+      GOOGLE_OAUTH_CLIENT_SECRET: ${GOOGLE_OAUTH_CLIENT_SECRET}
+      OPENAI_API_KEY: ${OPENAI_API_KEY}
+      LEADS_SHEET_ID: ${LEADS_SHEET_ID}
+      LEADS_SHEET_NAME: ${LEADS_SHEET_NAME:-Leads}
+      LEADS_LOG_SHEET_NAME: ${LEADS_LOG_SHEET_NAME:-envios_log}
+      LEADS_ERROR_SHEET_NAME: ${LEADS_ERROR_SHEET_NAME:-envios_erros}
+
+      EVOLUTION_BASE_URL: http://evolution_api:8080
+      EVOLUTION_API_KEY: ${EVOLUTION_API_KEY:-hogar_evolution_key_2026}
+      EVOLUTION_INSTANCE: ${EVOLUTION_INSTANCE}
+      META_PERMANENT_TOKEN: ${META_PERMANENT_TOKEN}
+      META_PHONE_NUMBER_ID: ${META_PHONE_NUMBER_ID}
+      META_GRAPH_VERSION: ${META_GRAPH_VERSION:-v19.0}
+      TWILIO_ACCOUNT_SID: ${TWILIO_ACCOUNT_SID}
+      TWILIO_AUTH_TOKEN: ${TWILIO_AUTH_TOKEN}
+      TWILIO_WHATSAPP_FROM: ${TWILIO_WHATSAPP_FROM:-whatsapp:+14155238886}
+
+      CONTACTS_CSV_PATH: ${CONTACTS_CSV_PATH:-/data/saida/planilha_mestre_sem_duplicados.csv}
+      CAMPAIGN_DRY_RUN: ${CAMPAIGN_DRY_RUN:-true}
+      CAMPAIGN_ID: ${CAMPAIGN_ID:-campanha_teste}
+      CAMPAIGN_TEMPLATE_FOCUS: ${CAMPAIGN_TEMPLATE_FOCUS:-ampolas}
+      CAMPAIGN_TEMPLATE_MODE: ${CAMPAIGN_TEMPLATE_MODE:-normal}
+      CAMPAIGN_FORCE_PHONE: ${CAMPAIGN_FORCE_PHONE:-}
+      CAMPAIGN_MAX_CONTACTS: ${CAMPAIGN_MAX_CONTACTS:-5}
+      CAMPAIGN_START_HOUR: ${CAMPAIGN_START_HOUR:-9}
+      CAMPAIGN_END_HOUR: ${CAMPAIGN_END_HOUR:-17}
+      CAMPAIGN_TIMEZONE: ${CAMPAIGN_TIMEZONE:-America/Sao_Paulo}
+      CAMPAIGN_DELAY_MIN_SECONDS: ${CAMPAIGN_DELAY_MIN_SECONDS:-25}
+      CAMPAIGN_DELAY_MAX_SECONDS: ${CAMPAIGN_DELAY_MAX_SECONDS:-45}
+
+    volumes:
+      - n8n_data:/home/node/.n8n
+      - ./saida:/data/saida:ro
+    networks:
+      - app_net
+
+  # --- Evolution API ---
+  evolution_api:
+    image: atendai/evolution-api:latest
+    container_name: evolution_api
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    environment:
+      AUTHENTICATION_TYPE: apikey
+      AUTHENTICATION_API_KEY: ${EVOLUTION_API_KEY:-hogar_evolution_key_2026}
+      AUTHENTICATION_EXPOSE_IN_FETCH_INSTANCES: "true"
+
+      SERVER_PORT: 8080
+      SERVER_URL: http://localhost:8080
+
+      # Database - PostgreSQL obrigatorio na Evolution API v2+
+      DATABASE_ENABLED: "true"
+      DATABASE_PROVIDER: postgresql
+      DATABASE_CONNECTION_URI: postgresql://evolution:evolution_pass_2026@evolution_postgres:5432/evolution
+      DATABASE_CONNECTION_CLIENT_NAME: evolution_api
+
+      # Redis
+      CACHE_REDIS_ENABLED: "true"
+      CACHE_REDIS_URI: redis://evolution_redis:6379
+      CACHE_REDIS_PREFIX_KEY: evolution
+      CACHE_REDIS_TTL: 604800
+
+      DEL_INSTANCE: "false"
+      DEL_TEMP_INSTANCES: "false"
+
+      WEBHOOK_GLOBAL_ENABLED: "false"
+
+      LOG_LEVEL: DEBUG
+      LOG_COLOR: "true"
+      CONFIG_SESSION_PHONE_CLIENT: ${CONFIG_SESSION_PHONE_CLIENT:-Evolution API}
+      CONFIG_SESSION_PHONE_NAME: ${CONFIG_SESSION_PHONE_NAME:-Chrome}
+      CONFIG_SESSION_PHONE_VERSION: ${CONFIG_SESSION_PHONE_VERSION}
+      QRCODE_LIMIT: ${QRCODE_LIMIT:-30}
+      QRCODE_COLOR: ${QRCODE_COLOR:-#175197}
+
+    volumes:
+      - evolution_instances:/evolution/instances
+      - evolution_store:/evolution/store
+    networks:
+      - app_net
+    depends_on:
+      - evolution_redis
+      - evolution_postgres
+
+  # --- PostgreSQL (banco da Evolution API) ---
+  evolution_postgres:
+    image: postgres:16-alpine
+    container_name: evolution_postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: evolution
+      POSTGRES_PASSWORD: evolution_pass_2026
+      POSTGRES_DB: evolution
+    volumes:
+      - evolution_pgdata:/var/lib/postgresql/data
+    networks:
+      - app_net
+
+  # --- Redis (cache de sessoes Evolution) ---
+  evolution_redis:
+    image: redis:7-alpine
+    container_name: evolution_redis
+    restart: unless-stopped
+    command: redis-server --appendonly yes
+    volumes:
+      - evolution_redis_data:/data
+    networks:
+      - app_net
+
+volumes:
+  n8n_data:
+  evolution_instances:
+  evolution_store:
+  evolution_redis_data:
+  evolution_pgdata:
+
+networks:
+  app_net:
+    driver: bridge

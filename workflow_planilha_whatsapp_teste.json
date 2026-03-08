@@ -1,0 +1,490 @@
+{
+    "name":  "Disparo WhatsApp - Planilha Local (Templates Teste)",
+    "nodes":  [
+                  {
+                      "id":  "node-manual",
+                      "name":  "Teste Manual",
+                      "type":  "n8n-nodes-base.manualTrigger",
+                      "typeVersion":  1,
+                      "position":  [
+                                       180,
+                                       300
+                                   ],
+                      "parameters":  {
+
+                                     }
+                  },
+                  {
+                      "id":  "node-read-file",
+                      "name":  "Ler CSV da Pasta Saida",
+                      "type":  "n8n-nodes-base.readBinaryFile",
+                      "typeVersion":  1,
+                      "position":  [
+                                       420,
+                                       300
+                                   ],
+                      "parameters":  {
+                                         "filePath":  "={{ $env.CONTACTS_CSV_PATH || \u0027/data/saida/planilha_mestre_sem_duplicados.csv\u0027 }}",
+                                         "dataPropertyName":  "data"
+                                     }
+                  },
+                  {
+                      "id":  "node-parse-csv",
+                      "name":  "Converter CSV em Itens",
+                      "type":  "n8n-nodes-base.spreadsheetFile",
+                      "typeVersion":  2,
+                      "position":  [
+                                       660,
+                                       300
+                                   ],
+                      "parameters":  {
+                                         "operation":  "fromFile",
+                                         "binaryPropertyName":  "data",
+                                         "fileFormat":  "csv",
+                                         "options":  {
+                                                         "headerRow":  true
+                                                     }
+                                     }
+                  },
+                  {
+                      "id":  "node-filter",
+                      "name":  "Filtrar Contatos Validos",
+                      "type":  "n8n-nodes-base.code",
+                      "typeVersion":  2,
+                      "position":  [
+                                       900,
+                                       300
+                                   ],
+                      "parameters":  {
+                                         "jsCode":  "const maxContacts = Number($env.CAMPAIGN_MAX_CONTACTS || 200);\nconst seen = new Set();\nconst namedContacts = [];\nconst unnamedContacts = [];\n\nconst normalizePhone = (value) =\u003e {\n  const digits = String(value || \u0027\u0027).replace(/\\D/g, \u0027\u0027);\n  if (!digits) return \u0027\u0027;\n  const phone = digits.startsWith(\u002755\u0027) ? digits : `55${digits}`;\n  if (phone.length \u003c 12 || phone.length \u003e 13) return \u0027\u0027;\n  return phone;\n};\n\nconst cleanName = (value) =\u003e String(value || \u0027\u0027)\n  .replace(/\\s+/g, \u0027 \u0027)\n  .replace(/[^\\p{L}\\p{N}\\s\u0027.-]/gu, \u0027\u0027)\n  .trim();\n\nconst chooseName = (row) =\u003e {\n  const candidates = [\n    row.nome,\n    row.name,\n    row.first_name,\n    row.nome_contato,\n    row.contato,\n    row.contact_name\n  ];\n\n  for (const candidate of candidates) {\n    const clean = cleanName(candidate);\n    if (!clean) continue;\n    const lower = clean.toLowerCase();\n    if ([\u0027cliente\u0027, \u0027contato\u0027, \u0027na\u0027, \u0027n/a\u0027, \u0027unknown\u0027].includes(lower)) continue;\n    return clean;\n  }\n\n  return \u0027\u0027;\n};\n\nfor (const item of $input.all()) {\n  const row = item.json || {};\n  const phone = normalizePhone(row.whatsapp || row.telefone || row.celular || row.phone || row.numero);\n  if (!phone) continue;\n  if (seen.has(phone)) continue;\n  seen.add(phone);\n\n  const nome = chooseName(row);\n  const primeiroNome = nome ? nome.split(\u0027 \u0027)[0] : \u0027\u0027;\n  const categoria = String(row.categoria || row.tipo || \u0027Cliente\u0027).trim() || \u0027Cliente\u0027;\n  const telefoneCsv = String(row.telefone || \u0027\u0027).replace(/\\D/g, \u0027\u0027);\n  const whatsappCsv = String(row.whatsapp || \u0027\u0027).replace(/\\D/g, \u0027\u0027);\n  const gruposOrigem = String(row.grupos_origem || row.grupo_origem || \u0027\u0027).trim();\n  const origemArquivo = String(row.arquivos_origem || row.origem_arquivo || \u0027\u0027).trim();\n\n  const normalized = {\n    json: {\n      nome,\n      primeiro_nome: primeiroNome,\n      contato_tag: primeiroNome || `contato ${phone.slice(-4)}`,\n      phone,\n      categoria,\n      telefone_csv: telefoneCsv,\n      whatsapp_csv: whatsappCsv,\n      origem_arquivo: origemArquivo,\n      grupos_origem: gruposOrigem,\n      eh_contato_salvo: String(row.eh_contato_salvo ?? \u0027\u0027),\n      eh_negocio: String(row.eh_negocio ?? \u0027\u0027),\n      eh_admin: String(row.eh_admin ?? \u0027\u0027),\n      contato_id: `${phone}-${origemArquivo || \u0027local\u0027}`\n    }\n  };\n\n  if (nome) {\n    namedContacts.push(normalized);\n  } else {\n    unnamedContacts.push(normalized);\n  }\n}\n\nconst out = [...namedContacts, ...unnamedContacts].slice(0, maxContacts);\n\nif (!out.length) {\n  return [{\n    json: {\n      _campaignDone: true,\n      message: \u0027Nenhum contato valido encontrado na planilha local.\u0027\n    }\n  }];\n}\n\nreturn out;"
+                                     }
+                  },
+                  {
+                      "id":  "node-check",
+                      "name":  "Ha Contatos?",
+                      "type":  "n8n-nodes-base.if",
+                      "typeVersion":  2,
+                      "position":  [
+                                       1140,
+                                       300
+                                   ],
+                      "parameters":  {
+                                         "conditions":  {
+                                                            "options":  {
+                                                                            "caseSensitive":  true,
+                                                                            "leftValue":  "",
+                                                                            "typeValidation":  "strict",
+                                                                            "version":  1
+                                                                        },
+                                                            "conditions":  [
+                                                                               {
+                                                                                   "id":  "cond-no-contacts",
+                                                                                   "leftValue":  "={{ $json._campaignDone }}",
+                                                                                   "rightValue":  true,
+                                                                                   "operator":  {
+                                                                                                    "type":  "boolean",
+                                                                                                    "operation":  "true"
+                                                                                                }
+                                                                               }
+                                                                           ],
+                                                            "combinator":  "and"
+                                                        },
+                                         "options":  {
+
+                                                     }
+                                     }
+                  },
+                  {
+                      "id":  "node-no-contacts",
+                      "name":  "Sem Contatos",
+                      "type":  "n8n-nodes-base.code",
+                      "typeVersion":  2,
+                      "position":  [
+                                       1380,
+                                       160
+                                   ],
+                      "parameters":  {
+                                         "jsCode":  "return [{ json: { status: \u0027sem_contatos\u0027, message: $json.message || \u0027Sem contatos para enviar.\u0027 } }];"
+                                     }
+                  },
+                  {
+                      "id":  "node-time-window",
+                      "name":  "Dentro da Janela 09h-17h?",
+                      "type":  "n8n-nodes-base.if",
+                      "typeVersion":  2,
+                      "position":  [
+                                       1380,
+                                       300
+                                   ],
+                      "parameters":  {
+                                         "conditions":  {
+                                                            "options":  {
+                                                                            "caseSensitive":  true,
+                                                                            "leftValue":  "",
+                                                                            "typeValidation":  "strict",
+                                                                            "version":  1
+                                                                        },
+                                                            "conditions":  [
+                                                                               {
+                                                                                   "id":  "cond-time-window",
+                                                                                   "leftValue":  "={{ (() =\u003e { const tz = String($env.CAMPAIGN_TIMEZONE || \u0027America/Sao_Paulo\u0027); const h = Number(new Intl.DateTimeFormat(\u0027en-US\u0027, { hour: \u00272-digit\u0027, hour12: false, timeZone: tz }).format(new Date())); const start = Number($env.CAMPAIGN_START_HOUR || 9); const end = Number($env.CAMPAIGN_END_HOUR || 17); return h \u003e= start \u0026\u0026 h \u003c end; })() }}",
+                                                                                   "rightValue":  true,
+                                                                                   "operator":  {
+                                                                                                    "type":  "boolean",
+                                                                                                    "operation":  "equals"
+                                                                                                }
+                                                                               }
+                                                                           ],
+                                                            "combinator":  "and"
+                                                        },
+                                         "options":  {
+
+                                                     }
+                                     }
+                  },
+                  {
+                      "id":  "node-out-window",
+                      "name":  "Fora da Janela de Envio",
+                      "type":  "n8n-nodes-base.code",
+                      "typeVersion":  2,
+                      "position":  [
+                                       1620,
+                                       220
+                                   ],
+                      "parameters":  {
+                                         "jsCode":  "return [{\n  json: {\n    status: \u0027fora_janela_envio\u0027,\n    message: \u0027Execucao encerrada: fora da janela permitida (09:00-17:00).\u0027,\n    now: new Date().toISOString()\n  }\n}];"
+                                     }
+                  },
+                  {
+                      "id":  "node-loop",
+                      "name":  "Loop Over Items",
+                      "type":  "n8n-nodes-base.splitInBatches",
+                      "typeVersion":  3,
+                      "position":  [
+                                       1380,
+                                       420
+                                   ],
+                      "parameters":  {
+                                         "batchSize":  1,
+                                         "options":  {
+
+                                                     }
+                                     }
+                  },
+                  {
+                      "id":  "node-template",
+                      "name":  "Montar Template Teste",
+                      "type":  "n8n-nodes-base.code",
+                      "typeVersion":  2,
+                      "position":  [
+                                       1620,
+                                       420
+                                   ],
+                      "parameters":  {
+                                         "jsCode":  "const nomeCompletoRaw = String($json.nome || \u0027\u0027).trim();\nconst primeiroNomeRaw = String($json.primeiro_nome || \u0027\u0027).trim();\nconst primeiroNome = primeiroNomeRaw || (nomeCompletoRaw ? nomeCompletoRaw.split(\u0027 \u0027)[0] : \u0027\u0027);\nconst nome = primeiroNome \u0026\u0026 primeiroNome.toLowerCase() !== \u0027cliente\u0027 ? primeiroNome : \u0027\u0027;\nconst categoria = String($json.categoria || \u0027Cliente\u0027).trim() || \u0027Cliente\u0027;\nconst foco = String($env.CAMPAIGN_TEMPLATE_FOCUS || \u0027oportunidades imobiliarias\u0027).trim();\nconst campaignId = String($env.CAMPAIGN_ID || `campanha_${new Date().toISOString().slice(0, 10)}`);\nconst templateMode = String($env.CAMPAIGN_TEMPLATE_MODE || \u0027normal\u0027).toLowerCase();\n\nconst originalPhone = String($json.phone || \u0027\u0027).replace(/\\D/g, \u0027\u0027);\nconst forcePhoneRaw = String($env.CAMPAIGN_FORCE_PHONE || \u0027\u0027).trim();\nconst forceDigits = forcePhoneRaw.replace(/\\D/g, \u0027\u0027);\nconst forcedPhone = forceDigits ? (forceDigits.startsWith(\u002755\u0027) ? forceDigits : `55${forceDigits}`) : \u0027\u0027;\nconst usarNumeroTeste = forcedPhone.length \u003e= 12 \u0026\u0026 forcedPhone.length \u003c= 13;\nconst phoneDestino = usarNumeroTeste ? forcedPhone : originalPhone;\nconst alertaNumeroTeste = forcePhoneRaw \u0026\u0026 !usarNumeroTeste\n  ? \u0027CAMPAIGN_FORCE_PHONE invalido. Seguindo telefone original.\u0027\n  : \u0027\u0027;\n\nconst telefonePlanilha = String($json.telefone_csv || originalPhone || \u0027\u0027).replace(/\\D/g, \u0027\u0027);\nconst grupoOrigemBruto = String($json.grupos_origem || \u0027\u0027).trim();\nconst grupoOrigem = grupoOrigemBruto\n  .replace(/excel results/ig, \u0027\u0027)\n  .replace(/\\s*\\|\\s*/g, \u0027 | \u0027)\n  .replace(/\\s+/g, \u0027 \u0027)\n  .trim();\nconst grupoPrincipal = grupoOrigem ? grupoOrigem.split(\u0027|\u0027)[0].trim() : \u0027\u0027;\nconst categoriaInfo = categoria \u0026\u0026 categoria.toLowerCase() !== \u0027cliente\u0027 ? categoria : \u0027\u0027;\n\nconst hashSeed = `${originalPhone}|${campaignId}|${grupoPrincipal}|${categoria}|${nome}`;\nlet hash = 0;\nfor (const ch of hashSeed) {\n  hash = ((hash \u003c\u003c 5) - hash + ch.charCodeAt(0)) \u003e\u003e\u003e 0;\n}\n\nconst pick = (arr, salt = 0) =\u003e {\n  if (!arr.length) return \u0027\u0027;\n  const index = (hash + salt + Math.floor(Math.random() * 997)) % arr.length;\n  return arr[index];\n};\n\nconst maybe = (value, chance = 0.5) =\u003e (Math.random() \u003c chance ? value : \u0027\u0027);\n\nlet mensagemFinal = \u0027\u0027;\nlet templateName = `T${(hash % 7) + 1}`;\n\nif (templateMode === \u0027debug\u0027) {\n  templateName = \u0027DEBUG\u0027;\n  mensagemFinal = [\n    \u0027TESTE TECNICO - DADOS DA PLANILHA\u0027,\n    `contato_id: ${$json.contato_id || \u0027-\u0027}`,\n    `nome: ${nome || \u0027-\u0027}`,\n    `telefone_planilha: +${telefonePlanilha || \u0027-\u0027}`,\n    `telefone_destino: +${phoneDestino || \u0027-\u0027}`,\n    `categoria: ${categoria}`,\n    `grupo_origem: ${grupoPrincipal || \u0027-\u0027}`,\n    `arquivo_origem: ${String($json.origem_arquivo || \u0027-\u0027)}`,\n    `campaign_id: ${campaignId}`\n  ].join(\u0027\\n\u0027);\n}\n\nif (templateMode === \u0027hogar\u0027) {\n  const aberturasComNome = [\n    `Oi ${nome}, tudo bem? Aqui e da equipe Hogar Imoveis.`,\n    `Ola ${nome}, aqui e da equipe Hogar Imoveis.`,\n    `${nome}, tudo certo? Falo da equipe Hogar Imoveis.`,\n    `${nome}, prazer falar com voce. Equipe Hogar Imoveis aqui.`\n  ];\n\n  const aberturasSemNome = [\n    \u0027Oi, tudo bem? Aqui e da equipe Hogar Imoveis.\u0027,\n    \u0027Ola! Aqui e da equipe Hogar Imoveis.\u0027,\n    \u0027Tudo certo? Falo da equipe Hogar Imoveis.\u0027,\n    \u0027Prazer falar com voce, aqui e da equipe Hogar Imoveis.\u0027\n  ];\n\n  const contextos = [\n    `Mapeamos uma oportunidade de ${foco} com potencial de valorizacao em Goiania.`,\n    `Temos uma oportunidade de ${foco} alinhada para analise rapida.`,\n    `Selecionamos uma opcao de ${foco} com boa relacao risco x retorno.`,\n    `Encontramos uma oportunidade de ${foco} com condicoes competitivas no momento.`\n  ];\n\n  if (grupoPrincipal) {\n    contextos.push(`O contato veio do grupo ${grupoPrincipal}, por isso separei uma sugestao objetiva.`);\n  }\n\n  if (categoriaInfo) {\n    contextos.push(`A proposta foi montada para o perfil ${categoriaInfo}.`);\n  }\n\n  const provas = [\n    \u0027Sem compromisso: se nao fizer sentido, encerramos por aqui.\u0027,\n    \u0027A analise e objetiva, sem pressao comercial.\u0027,\n    \u0027E uma abordagem consultiva, com foco no seu momento.\u0027,\n    \u0027A ideia e te poupar tempo com opcoes filtradas.\u0027\n  ];\n\n  const ctas = [\n    \u0027Posso te enviar agora um resumo curto com faixa de valor e proximos passos?\u0027,\n    \u0027Se fizer sentido, te mando em seguida 2 opcoes enxutas para avaliacao.\u0027,\n    \u0027Quer que eu te encaminhe os detalhes de forma direta, por aqui mesmo?\u0027,\n    \u0027Posso compartilhar agora uma visao rapida das melhores opcoes da semana?\u0027,\n    \u0027Prefere que eu envie primeiro um resumo de 3 linhas e depois detalhamos?\u0027\n  ];\n\n  const fechamentos = [\n    \u0027Se preferir, posso retornar em outro horario.\u0027,\n    \u0027Se nao quiser receber esse tipo de contato, me avise que removo da lista.\u0027,\n    \u0027Caso nao seja o momento, eu paro por aqui sem problema.\u0027,\n    \u0027Se quiser, adapto o perfil antes de enviar qualquer opcao.\u0027\n  ];\n\n  const assinaturas = [\n    \u0027Equipe Hogar Imoveis\u0027,\n    \u0027Time Comercial Hogar Imoveis\u0027,\n    \u0027Consultoria Hogar Imoveis\u0027\n  ];\n\n  const abertura = nome ? pick(aberturasComNome, 11) : pick(aberturasSemNome, 13);\n  const contexto = pick(contextos, 17);\n  const prova = pick(provas, 19);\n  const cta = pick(ctas, 23);\n  const fechamento = maybe(pick(fechamentos, 29), 0.55);\n  const assinatura = pick(assinaturas, 31);\n\n  mensagemFinal = [abertura, contexto, prova, cta, fechamento, `(${assinatura})`]\n    .filter(Boolean)\n    .join(\u0027 \u0027);\n\n  templateName = `HOGAR_V${((hash + Math.floor(Math.random() * 1000)) % 12) + 1}`;\n}\n\nif (templateMode !== \u0027hogar\u0027 \u0026\u0026 templateMode !== \u0027debug\u0027) {\n  const basicos = [\n    nome\n      ? `Oi ${nome}, separei uma oportunidade de ${foco}. Quer que eu te envie agora?`\n      : `Oi, separei uma oportunidade de ${foco}. Quer que eu te envie agora?`,\n    nome\n      ? `${nome}, identifiquei uma oportunidade alinhada ao seu perfil. Posso compartilhar em seguida?`\n      : \u0027Identifiquei uma oportunidade alinhada ao seu perfil. Posso compartilhar em seguida?\u0027,\n    nome\n      ? `${nome}, tenho uma opcao com bom potencial no mercado imobiliario. Posso te mandar um resumo?`\n      : \u0027Tenho uma opcao com bom potencial no mercado imobiliario. Posso te mandar um resumo?\u0027\n  ];\n\n  mensagemFinal = pick(basicos, 41);\n}\n\nreturn [{\n  json: {\n    ...$json,\n    campaignId,\n    template_id: templateName,\n    mensagem_final: mensagemFinal,\n    categoria,\n    phone_original: originalPhone,\n    phone_destino: phoneDestino,\n    phone: phoneDestino,\n    modo_teste_numero: usarNumeroTeste,\n    alerta_numero_teste: alertaNumeroTeste,\n    template_mode: templateMode\n  }\n}];"
+                                     }
+                  },
+                  {
+                      "id":  "node-if-dry",
+                      "name":  "Modo Dry Run?",
+                      "type":  "n8n-nodes-base.if",
+                      "typeVersion":  2,
+                      "position":  [
+                                       1860,
+                                       420
+                                   ],
+                      "parameters":  {
+                                         "conditions":  {
+                                                            "options":  {
+                                                                            "caseSensitive":  true,
+                                                                            "leftValue":  "",
+                                                                            "typeValidation":  "strict",
+                                                                            "version":  1
+                                                                        },
+                                                            "conditions":  [
+                                                                               {
+                                                                                   "id":  "cond-dry-run",
+                                                                                   "leftValue":  "={{ String($env.CAMPAIGN_DRY_RUN || \u0027true\u0027).toLowerCase() === \u0027true\u0027 }}",
+                                                                                   "rightValue":  true,
+                                                                                   "operator":  {
+                                                                                                    "type":  "boolean",
+                                                                                                    "operation":  "equals"
+                                                                                                }
+                                                                               }
+                                                                           ],
+                                                            "combinator":  "and"
+                                                        },
+                                         "options":  {
+
+                                                     }
+                                     }
+                  },
+                  {
+                      "id":  "node-preview",
+                      "name":  "Registrar Preview (Dry Run)",
+                      "type":  "n8n-nodes-base.code",
+                      "typeVersion":  2,
+                      "position":  [
+                                       2100,
+                                       320
+                                   ],
+                      "parameters":  {
+                                         "jsCode":  "return [{\n  json: {\n    ...$json,\n    envio_ok: true,\n    envio_status: \u0027dry_run\u0027,\n    envio_em: new Date().toISOString(),\n    provider_message_id: \u0027\u0027,\n    provider_status: \u0027DRY_RUN\u0027,\n    erro_envio: \u0027\u0027\n  }\n}];"
+                                     }
+                  },
+                  {
+                      "id":  "node-send",
+                      "name":  "Enviar WhatsApp (Evolution)",
+                      "type":  "n8n-nodes-base.httpRequest",
+                      "typeVersion":  4.2,
+                      "position":  [
+                                       2100,
+                                       520
+                                   ],
+                      "parameters":  {
+                                         "method":  "POST",
+                                         "url":  "={{ $env.EVOLUTION_BASE_URL }}/message/sendText/{{ $env.EVOLUTION_INSTANCE }}",
+                                         "sendHeaders":  true,
+                                         "headerParameters":  {
+                                                                  "parameters":  [
+                                                                                     {
+                                                                                         "name":  "apikey",
+                                                                                         "value":  "={{ $env.EVOLUTION_API_KEY }}"
+                                                                                     },
+                                                                                     {
+                                                                                         "name":  "Content-Type",
+                                                                                         "value":  "application/json"
+                                                                                     }
+                                                                                 ]
+                                                              },
+                                         "sendBody":  true,
+                                         "specifyBody":  "keypair",
+                                         "bodyParameters":  {
+                                                                "parameters":  [
+                                                                                   {
+                                                                                       "name":  "number",
+                                                                                       "value":  "={{ $json.phone }}"
+                                                                                   },
+                                                                                   {
+                                                                                       "name":  "text",
+                                                                                       "value":  "={{ $json.mensagem_final }}"
+                                                                                   }
+                                                                               ]
+                                                            },
+                                         "options":  {
+                                                         "timeout":  30000
+                                                     }
+                                     },
+                      "continueOnFail":  true
+                  },
+                  {
+                      "id":  "node-classify",
+                      "name":  "Classificar Resultado",
+                      "type":  "n8n-nodes-base.code",
+                      "typeVersion":  2,
+                      "position":  [
+                                       2340,
+                                       520
+                                   ],
+                      "parameters":  {
+                                         "jsCode":  "const leadData = $(\u0027Montar Template Teste\u0027).item.json;\nconst responseData = $input.item.json || {};\nconst inputError = $input.item.error || null;\n\nconst providerMessageId = responseData?.key?.id || \u0027\u0027;\nconst providerStatus = responseData.status || (providerMessageId ? \u0027PENDING\u0027 : \u0027ERROR\u0027);\n\nconst providerErrorMessage =\n  (inputError \u0026\u0026 inputError.message)\n  || responseData.message\n  || responseData.error\n  || \u0027\u0027;\n\nconst hasProviderError = !!providerErrorMessage \u0026\u0026 !providerMessageId;\nconst envioOk = !!providerMessageId \u0026\u0026 !hasProviderError;\n\nreturn [{\n  json: {\n    ...leadData,\n    envio_ok: envioOk,\n    envio_status: envioOk ? \u0027enviado\u0027 : \u0027erro\u0027,\n    envio_em: new Date().toISOString(),\n    provider_message_id: providerMessageId,\n    provider_status: providerStatus,\n    erro_envio: envioOk ? \u0027\u0027 : (providerErrorMessage || \u0027Erro desconhecido no envio Evolution\u0027)\n  }\n}];"
+                                     }
+                  },
+                  {
+                      "id":  "node-wait",
+                      "name":  "Espera Anti-RateLimit",
+                      "type":  "n8n-nodes-base.wait",
+                      "typeVersion":  1.1,
+                      "position":  [
+                                       2580,
+                                       420
+                                   ],
+                      "parameters":  {
+                                         "resume":  "timeInterval",
+                                         "unit":  "seconds",
+                                         "amount":  "={{ Math.floor(Number($env.CAMPAIGN_DELAY_MIN_SECONDS || 25) + Math.random() * (Number($env.CAMPAIGN_DELAY_MAX_SECONDS || 45) - Number($env.CAMPAIGN_DELAY_MIN_SECONDS || 25) + 1)) }}"
+                                     }
+                  }
+              ],
+    "connections":  {
+                        "Teste Manual":  {
+                                             "main":  [
+                                                          [
+                                                              {
+                                                                  "node":  "Ler CSV da Pasta Saida",
+                                                                  "type":  "main",
+                                                                  "index":  0
+                                                              }
+                                                          ]
+                                                      ]
+                                         },
+                        "Ler CSV da Pasta Saida":  {
+                                                       "main":  [
+                                                                    [
+                                                                        {
+                                                                            "node":  "Converter CSV em Itens",
+                                                                            "type":  "main",
+                                                                            "index":  0
+                                                                        }
+                                                                    ]
+                                                                ]
+                                                   },
+                        "Converter CSV em Itens":  {
+                                                       "main":  [
+                                                                    [
+                                                                        {
+                                                                            "node":  "Filtrar Contatos Validos",
+                                                                            "type":  "main",
+                                                                            "index":  0
+                                                                        }
+                                                                    ]
+                                                                ]
+                                                   },
+                        "Filtrar Contatos Validos":  {
+                                                         "main":  [
+                                                                      [
+                                                                          {
+                                                                              "node":  "Ha Contatos?",
+                                                                              "type":  "main",
+                                                                              "index":  0
+                                                                          }
+                                                                      ]
+                                                                  ]
+                                                     },
+                        "Ha Contatos?":  {
+                                             "main":  [
+                                                          [
+                                                              {
+                                                                  "node":  "Sem Contatos",
+                                                                  "type":  "main",
+                                                                  "index":  0
+                                                              }
+                                                          ],
+                                                          [
+                                                              {
+                                                                  "node":  "Dentro da Janela 09h-17h?",
+                                                                  "type":  "main",
+                                                                  "index":  0
+                                                              }
+                                                          ]
+                                                      ]
+                                         },
+                        "Dentro da Janela 09h-17h?":  {
+                                                          "main":  [
+                                                                       [
+                                                                           {
+                                                                               "node":  "Loop Over Items",
+                                                                               "type":  "main",
+                                                                               "index":  0
+                                                                           }
+                                                                       ],
+                                                                       [
+                                                                           {
+                                                                               "node":  "Fora da Janela de Envio",
+                                                                               "type":  "main",
+                                                                               "index":  0
+                                                                           }
+                                                                       ]
+                                                                   ]
+                                                      },
+                        "Loop Over Items":  {
+                                                "main":  [
+                                                             [
+
+                                                             ],
+                                                             [
+                                                                 {
+                                                                     "node":  "Montar Template Teste",
+                                                                     "type":  "main",
+                                                                     "index":  0
+                                                                 }
+                                                             ]
+                                                         ]
+                                            },
+                        "Montar Template Teste":  {
+                                                      "main":  [
+                                                                   [
+                                                                       {
+                                                                           "node":  "Modo Dry Run?",
+                                                                           "type":  "main",
+                                                                           "index":  0
+                                                                       }
+                                                                   ]
+                                                               ]
+                                                  },
+                        "Modo Dry Run?":  {
+                                              "main":  [
+                                                           [
+                                                               {
+                                                                   "node":  "Registrar Preview (Dry Run)",
+                                                                   "type":  "main",
+                                                                   "index":  0
+                                                               }
+                                                           ],
+                                                           [
+                                                               {
+                                                                   "node":  "Enviar WhatsApp (Evolution)",
+                                                                   "type":  "main",
+                                                                   "index":  0
+                                                               }
+                                                           ]
+                                                       ]
+                                          },
+                        "Registrar Preview (Dry Run)":  {
+                                                            "main":  [
+                                                                         [
+                                                                             {
+                                                                                 "node":  "Espera Anti-RateLimit",
+                                                                                 "type":  "main",
+                                                                                 "index":  0
+                                                                             }
+                                                                         ]
+                                                                     ]
+                                                        },
+                        "Enviar WhatsApp (Evolution)":  {
+                                                            "main":  [
+                                                                         [
+                                                                             {
+                                                                                 "node":  "Classificar Resultado",
+                                                                                 "type":  "main",
+                                                                                 "index":  0
+                                                                             }
+                                                                         ]
+                                                                     ]
+                                                        },
+                        "Classificar Resultado":  {
+                                                      "main":  [
+                                                                   [
+                                                                       {
+                                                                           "node":  "Espera Anti-RateLimit",
+                                                                           "type":  "main",
+                                                                           "index":  0
+                                                                       }
+                                                                   ]
+                                                               ]
+                                                  },
+                        "Espera Anti-RateLimit":  {
+                                                      "main":  [
+                                                                   [
+                                                                       {
+                                                                           "node":  "Loop Over Items",
+                                                                           "type":  "main",
+                                                                           "index":  0
+                                                                       }
+                                                                   ]
+                                                               ]
+                                                  }
+                    },
+    "active":  false,
+    "settings":  {
+                     "executionOrder":  "v1",
+                     "timezone":  "America/Sao_Paulo",
+                     "saveManualExecutions":  true,
+                     "saveExecutionProgress":  true,
+                     "callerPolicy":  "workflowsFromSameOwner"
+                 },
+    "id":  "Qm3Tn7Vk1Lp9Xr2d",
+    "tags":  [
+
+             ]
+}
