@@ -47,29 +47,6 @@ Quando usar:
 - operacao rastreavel com status em planilha
 - fluxo mais proximo de producao
 
-### `workflow_novo.json`
-
-Objetivo:
-
-- fluxo original baseado em Agendor
-
-Status:
-
-- legado
-
-### `workflow_novo_adaptado.json`
-
-Objetivo:
-
-- variante do fluxo Agendor adaptada para variaveis de ambiente e Evolution API
-
-Dependencias:
-
-- `AGENDOR_API_TOKEN`
-- `AGENDOR_USER_ID`
-- `EVOLUTION_INSTANCE`
-- controles de campanha
-
 ## Scripts
 
 ### `scripts/consolidar_planilhas.py`
@@ -97,12 +74,6 @@ Funcao:
 - reimporta os leads em uma planilha ja existente
 - usa `LEADS_SHEET_ID` do `.env` ou argumento manual
 
-### `scripts/adapt_workflow_novo.js`
-
-Funcao:
-
-- adapta o fluxo Agendor original para a configuracao baseada em variaveis de ambiente
-
 ## Compose files
 
 ### `docker-compose.yml`
@@ -113,10 +84,6 @@ Stack principal:
 - `evolution_api`
 - `evolution_postgres`
 - `evolution_redis`
-
-### `docker-compose.evolution.yml`
-
-Stack alternativa/legada para subir somente Evolution API + Redis.
 
 ## Arquivos locais nao versionados
 

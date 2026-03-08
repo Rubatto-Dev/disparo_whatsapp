@@ -101,6 +101,32 @@ def read_csv(filepath: str) -> list[dict[str, str]]:
     return rows
 
 
+def load_segment_source(segmento: str) -> list[dict[str, str]]:
+    legacy_name = {
+        "cliente": "leads_import_clientes.csv",
+        "corretor_parceiro": "leads_import_corretores_parceiros.csv",
+    }[segmento]
+    legacy_file = SAIDA_DIR / legacy_name
+    if legacy_file.exists():
+        return read_csv(str(legacy_file))
+
+    master_file = SAIDA_DIR / "planilha_mestre_sem_duplicados.csv"
+    if not master_file.exists():
+        return []
+
+    category_map = {
+        "cliente": "cliente",
+        "corretor_parceiro": "corretor/parceiro",
+    }
+    target = category_map[segmento]
+    master_rows = read_csv(str(master_file))
+    return [
+        row
+        for row in master_rows
+        if str(row.get("categoria", "")).strip().lower() == target
+    ]
+
+
 def map_csv_to_leads(csv_rows: list[dict[str, str]], segmento: str) -> list[dict[str, str]]:
     result: list[dict[str, str]] = []
     for row in csv_rows:
@@ -133,12 +159,12 @@ def main() -> None:
     print("Lendo CSVs...")
     all_leads: list[dict[str, str]] = []
 
-    clientes = map_csv_to_leads(read_csv(str(SAIDA_DIR / "leads_import_clientes.csv")), "cliente")
+    clientes = map_csv_to_leads(load_segment_source("cliente"), "cliente")
     all_leads.extend(clientes)
     print(f"  Clientes: {len(clientes)}")
 
     corretores = map_csv_to_leads(
-        read_csv(str(SAIDA_DIR / "leads_import_corretores_parceiros.csv")),
+        load_segment_source("corretor_parceiro"),
         "corretor_parceiro",
     )
     all_leads.extend(corretores)

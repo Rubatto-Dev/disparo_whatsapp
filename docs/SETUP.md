@@ -37,11 +37,10 @@ Variaveis mais comuns:
 - `LEADS_SHEET_NAME`
 - `LEADS_LOG_SHEET_NAME`
 - `LEADS_ERROR_SHEET_NAME`
+- `GOOGLE_DESKTOP_CLIENT_ID`
+- `GOOGLE_DESKTOP_CLIENT_SECRET`
 - `EVOLUTION_API_KEY`
 - `EVOLUTION_INSTANCE`
-- `TWILIO_ACCOUNT_SID`
-- `TWILIO_AUTH_TOKEN`
-- `TWILIO_WHATSAPP_FROM`
 - `CONTACTS_CSV_PATH`
 - `CAMPAIGN_DRY_RUN`
 - `CAMPAIGN_MAX_CONTACTS`
@@ -98,7 +97,6 @@ Arquivos principais:
 
 - `workflow_planilha_whatsapp_teste.json`
 - `workflow_hogar_evolution.json`
-- `workflow_novo_adaptado.json`
 
 ## 6. Configurar credenciais no n8n
 
@@ -111,15 +109,6 @@ Preencha no n8n:
 - Client ID
 - Client Secret
 - Redirect URI: `http://localhost:5678/rest/oauth2-credential/callback`
-
-### Twilio
-
-Necessario se o fluxo usar Twilio.
-
-Preencha no n8n:
-
-- Account SID
-- Auth Token
 
 ### Evolution API
 
@@ -161,6 +150,7 @@ O script:
 - abre o OAuth local na primeira execucao
 - cria as abas `Leads`, `envios_log` e `envios_erros`
 - grava `LEADS_SHEET_ID` no `.env`
+- usa `saida/planilha_mestre_sem_duplicados.csv` como fonte padrao quando os CSVs legados de importacao nao existem
 
 ## 8. Primeiro teste
 

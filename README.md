@@ -6,7 +6,7 @@ O projeto nao e um app web tradicional. Ele e um pacote de operacao com tres blo
 
 1. Scripts Python para consolidar exportacoes de contatos e preparar CSVs de trabalho.
 2. Infra local via Docker Compose para rodar n8n e Evolution API.
-3. Workflows n8n em JSON para diferentes estrategias de envio.
+3. Workflows n8n em JSON para dois modos oficialmente suportados.
 
 ## Estado do repositorio
 
@@ -54,21 +54,13 @@ Modo mais estruturado para operacao com planilha online e geracao de mensagem co
 
 Uso indicado quando o time quer rastreabilidade por status/log em planilha.
 
-### 3. Agendor + Evolution API
-
-Fluxo legado/adaptado para buscar contatos do Agendor.
-
-- Workflows: `workflow_novo.json`, `workflow_novo_adaptado.json`
-- Script auxiliar: `scripts/adapt_workflow_novo.js`
-- Credenciais: `AGENDOR_API_TOKEN`, `AGENDOR_USER_ID`, Evolution API
-
 ## Estrutura do projeto
 
 ```text
 .
 |-- docker-compose.yml
-|-- docker-compose.evolution.yml
-|-- workflow_*.json
+|-- workflow_hogar_evolution.json
+|-- workflow_planilha_whatsapp_teste.json
 |-- scripts/
 |-- docs/
 |-- .env.example
@@ -112,7 +104,7 @@ Saida:
 python scripts/setup_google_sheets.py
 ```
 
-O script cria a planilha, cria as abas necessarias e atualiza `LEADS_SHEET_ID` no `.env` sem corromper a linha existente.
+O script cria a planilha, cria as abas necessarias e atualiza `LEADS_SHEET_ID` no `.env` sem corromper a linha existente. Ele usa por padrao os dados de `saida/planilha_mestre_sem_duplicados.csv` quando os arquivos legados `leads_import_*.csv` nao existirem.
 
 ### Reimportar leads em uma planilha existente
 
@@ -129,6 +121,7 @@ python scripts/fix_import.py 1AbCdEfGhIjKlMnOpQrStUvWxYz
 ## Documentacao
 
 - [Setup local](docs/SETUP.md)
+- [Deploy no notebook](docs/DEPLOY_NOTEBOOK.md)
 - [Runbook operacional](docs/RUNBOOK.md)
 - [Mapa de workflows e arquivos](docs/WORKFLOWS.md)
 
@@ -138,6 +131,7 @@ python scripts/fix_import.py 1AbCdEfGhIjKlMnOpQrStUvWxYz
 - O n8n mantem dados importantes em volume persistente; preserve o volume `n8n_data` entre reinicializacoes.
 - Para importar workflows no n8n, use o menu de tres pontos no Editor e escolha `Import from File`.
 - Nunca publique `.env`, `google_token.json`, planilhas exportadas ou CSVs gerados.
+- O projeto foi reduzido para dois caminhos oficiais. Todo o restante foi tratado como legado e removido do repositorio.
 
 ## Proximos passos antes de operacao real
 

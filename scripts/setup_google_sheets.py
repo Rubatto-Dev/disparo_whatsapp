@@ -155,6 +155,32 @@ def read_csv(filepath: str) -> list[dict[str, str]]:
     return rows
 
 
+def load_segment_source(segmento: str) -> list[dict[str, str]]:
+    legacy_name = {
+        "cliente": "leads_import_clientes.csv",
+        "corretor_parceiro": "leads_import_corretores_parceiros.csv",
+    }[segmento]
+    legacy_file = SAIDA_DIR / legacy_name
+    if legacy_file.exists():
+        return read_csv(str(legacy_file))
+
+    master_file = SAIDA_DIR / "planilha_mestre_sem_duplicados.csv"
+    if not master_file.exists():
+        return []
+
+    category_map = {
+        "cliente": "cliente",
+        "corretor_parceiro": "corretor/parceiro",
+    }
+    target = category_map[segmento]
+    master_rows = read_csv(str(master_file))
+    return [
+        row
+        for row in master_rows
+        if str(row.get("categoria", "")).strip().lower() == target
+    ]
+
+
 def map_csv_to_leads(csv_rows: list[dict[str, str]], segmento: str) -> list[dict[str, str]]:
     result: list[dict[str, str]] = []
     for row in csv_rows:
@@ -205,23 +231,23 @@ def main() -> None:
 
     print("[4/5] Importando leads dos CSVs...")
 
-    clientes_file = SAIDA_DIR / "leads_import_clientes.csv"
-    corretores_file = SAIDA_DIR / "leads_import_corretores_parceiros.csv"
     all_leads: list[dict[str, str]] = []
 
-    if clientes_file.exists():
-        clientes = map_csv_to_leads(read_csv(str(clientes_file)), "cliente")
+    clientes_rows = load_segment_source("cliente")
+    if clientes_rows:
+        clientes = map_csv_to_leads(clientes_rows, "cliente")
         all_leads.extend(clientes)
         print(f"  Clientes: {len(clientes)} linhas")
     else:
-        print(f"  AVISO: {clientes_file} nao encontrado")
+        print("  AVISO: nenhuma base de clientes encontrada em saida/")
 
-    if corretores_file.exists():
-        corretores = map_csv_to_leads(read_csv(str(corretores_file)), "corretor_parceiro")
+    corretores_rows = load_segment_source("corretor_parceiro")
+    if corretores_rows:
+        corretores = map_csv_to_leads(corretores_rows, "corretor_parceiro")
         all_leads.extend(corretores)
         print(f"  Corretores/Parceiros: {len(corretores)} linhas")
     else:
-        print(f"  AVISO: {corretores_file} nao encontrado")
+        print("  AVISO: nenhuma base de corretores/parceiros encontrada em saida/")
 
     if all_leads:
         rows_data = [[lead[header] for header in LEADS_HEADERS] for lead in all_leads]
