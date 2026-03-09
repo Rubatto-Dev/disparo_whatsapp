@@ -121,6 +121,7 @@ python scripts/fix_import.py 1AbCdEfGhIjKlMnOpQrStUvWxYz
 ## Documentacao
 
 - [Setup local](docs/SETUP.md)
+- [Checklist rapido de 15 minutos](docs/QUICKSTART_15_MIN.md)
 - [Deploy no notebook](docs/DEPLOY_NOTEBOOK.md)
 - [Runbook operacional](docs/RUNBOOK.md)
 - [Mapa de workflows e arquivos](docs/WORKFLOWS.md)
