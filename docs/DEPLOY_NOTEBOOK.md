@@ -16,7 +16,7 @@ Antes de sair desta maquina, garanta que voce tem:
 
 ## Caminho recomendado
 
-Para amanha, o caminho mais simples e previsivel e:
+Para deploy real no notebook da empresa, o caminho mais simples e previsivel e:
 
 1. subir Docker Desktop
 2. clonar o repositorio
@@ -25,6 +25,30 @@ Para amanha, o caminho mais simples e previsivel e:
 5. importar um dos dois workflows oficiais
 6. fazer dry run
 7. fazer teste controlado
+8. fazer go-live de 1 contato real
+
+## Regra critica do numero enviante
+
+No modo WhatsApp, o numero enviante nao vem da planilha.
+
+O numero enviante e sempre o WhatsApp pareado na `EVOLUTION_INSTANCE`.
+
+O numero do cliente vem da planilha e entra como destinatario.
+
+Durante homologacao, `CAMPAIGN_FORCE_PHONE` sobrescreve o destinatario para um numero de teste.
+
+No go-live real, `CAMPAIGN_FORCE_PHONE` deve ficar vazio.
+
+## Validacao concluida em 2026-03-09
+
+Antes do deploy no notebook, este repositorio foi validado localmente com:
+
+- stack ativa em Docker
+- `workflow_planilha_whatsapp_teste.json` importado no n8n
+- execucao real controlada com `envio_ok=true`
+- retorno de `provider_message_id` pela Evolution API
+- confirmacao de que o numero enviante depende da `EVOLUTION_INSTANCE`
+- confirmacao de que o numero da planilha e preservado mesmo quando tem DDI explicito
 
 ## Passo a passo
 
@@ -158,6 +182,19 @@ curl.exe -X GET http://localhost:8080/instance/connect/SUA_INSTANCIA `
 
 Se a resposta vier com `pairingCode` ou `code`, use esse retorno para concluir o pareamento do WhatsApp.
 
+Para confirmar qual numero esta enviando de fato:
+
+```powershell
+curl.exe -X GET http://localhost:8080/instance/fetchInstances `
+  -H "apikey: SUA_API_KEY"
+```
+
+Confirme no retorno:
+
+- `name` igual ao valor de `EVOLUTION_INSTANCE`
+- `connectionStatus` igual a `open`
+- `number` igual ao WhatsApp que deve enviar
+
 #### OpenAI
 
 Necessario somente para `workflow_hogar_evolution.json`.
@@ -169,7 +206,7 @@ Necessario somente para `workflow_hogar_evolution.json`.
 Configuracao recomendada:
 
 - `CAMPAIGN_DRY_RUN=true`
-- `CAMPAIGN_MAX_CONTACTS=3`
+- `CAMPAIGN_MAX_CONTACTS=1`
 - `CAMPAIGN_FORCE_PHONE=<seu_numero>` quando aplicavel
 
 Depois de editar `.env`, recrie o n8n:
@@ -184,15 +221,32 @@ Quando o dry run estiver consistente:
 
 1. mude `CAMPAIGN_DRY_RUN=false`
 2. mantenha `CAMPAIGN_FORCE_PHONE` apontando para um numero seu
-3. execute manualmente o workflow
-4. valide o retorno no n8n
+3. mantenha `CAMPAIGN_MAX_CONTACTS=1`
+4. execute manualmente o workflow
+5. valide no n8n:
+   - `phone_destino` apontando para seu numero
+   - `envio_ok=true`
+   - `provider_message_id` preenchido
 
-### 10. Go-live limitado
+### 10. Go-live real de 1 contato
 
 Somente depois do teste controlado:
 
 1. limpe `CAMPAIGN_FORCE_PHONE`
-2. comece com `CAMPAIGN_MAX_CONTACTS=20`
+2. mantenha `CAMPAIGN_MAX_CONTACTS=1`
+3. execute manualmente o workflow
+4. valide no n8n:
+   - `phone_original` igual ao numero da planilha
+   - `phone_destino` igual ao numero da planilha
+   - `envio_ok=true`
+   - `provider_message_id` preenchido
+
+### 11. Go-live limitado
+
+Somente depois do 1 contato real:
+
+1. mantenha `CAMPAIGN_FORCE_PHONE` vazio
+2. suba `CAMPAIGN_MAX_CONTACTS=20`
 3. rode manualmente
 4. acompanhe a execucao inteira
 
@@ -221,6 +275,7 @@ Revise:
 - se `EVOLUTION_INSTANCE` no `.env` bate com a instancia criada
 - se a instancia foi realmente pareada no WhatsApp
 - se o `apikey` enviado e o mesmo definido no compose
+- se o numero retornado em `fetchInstances` e o numero que deve enviar
 
 ### Workflow nao acha a planilha local
 
@@ -229,3 +284,4 @@ Revise:
 - existencia de `saida/planilha_mestre_sem_duplicados.csv`
 - valor de `CONTACTS_CSV_PATH`
 - `N8N_RESTRICT_FILE_ACCESS_TO`
+- se o arquivo CSV foi salvo sem corromper o cabecalho

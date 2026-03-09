@@ -15,6 +15,17 @@ Confirme antes de cada operacao:
 5. O workflow correto foi importado e salvo no n8n.
 6. As credenciais do n8n foram testadas.
 7. `CAMPAIGN_DRY_RUN` esta coerente com a etapa atual.
+8. `EVOLUTION_INSTANCE` esta pareada e com `connectionStatus=open`.
+9. O numero enviante retornado por `fetchInstances` e o numero esperado.
+
+## Numero enviante
+
+Regra fixa do sistema:
+
+- o numero enviante vem da `EVOLUTION_INSTANCE`
+- o numero destinatario vem da planilha ou do Google Sheets
+- `CAMPAIGN_FORCE_PHONE` so deve existir em homologacao
+- para go-live real, `CAMPAIGN_FORCE_PHONE` precisa ficar vazio
 
 ## Estrategia recomendada
 
@@ -25,7 +36,7 @@ Use para validar parsing, filtros, mensagens e payloads sem envio real.
 Configuracao sugerida:
 
 - `CAMPAIGN_DRY_RUN=true`
-- `CAMPAIGN_MAX_CONTACTS=3`
+- `CAMPAIGN_MAX_CONTACTS=1`
 
 Criterio de saida:
 
@@ -41,15 +52,31 @@ Configuracao sugerida:
 
 - `CAMPAIGN_DRY_RUN=false`
 - `CAMPAIGN_FORCE_PHONE=<SEU_NUMERO_DE_TESTE>`
-- `CAMPAIGN_MAX_CONTACTS=3`
+- `CAMPAIGN_MAX_CONTACTS=1`
 
 Criterio de saida:
 
 - mensagem chega corretamente
 - payload do provedor retorna sucesso
 - logs/status ficam consistentes
+- `phone_destino` no n8n aponta para o numero de teste
 
-### Etapa 3. Go-live limitado
+### Etapa 3. Go-live real de 1 contato
+
+Configuracao sugerida:
+
+- `CAMPAIGN_DRY_RUN=false`
+- `CAMPAIGN_FORCE_PHONE=` vazio
+- `CAMPAIGN_MAX_CONTACTS=1`
+
+Criterio de saida:
+
+- `phone_original` bate com o numero da planilha
+- `phone_destino` bate com o numero da planilha
+- `envio_ok=true`
+- `provider_message_id` preenchido
+
+### Etapa 4. Go-live limitado
 
 Configuracao sugerida:
 
@@ -70,6 +97,7 @@ Durante a operacao, observe:
 
 - execucoes do n8n
 - resposta do provider de envio
+- `phone_destino` nos primeiros itens
 - atualizacao de status na planilha, se aplicavel
 - tempo medio entre envios
 - erros de autenticacao, rate limit e timeout
@@ -97,6 +125,7 @@ Verifique:
 
 - janela de envio
 - `CAMPAIGN_DRY_RUN`
+- `CAMPAIGN_FORCE_PHONE`
 - filtros do workflow
 - base vazia ou sem telefone valido
 
@@ -134,6 +163,7 @@ Nunca faca:
 - commit de `google_token.json`
 - commit das planilhas exportadas
 - envio em lote alto sem dry run previo
+- go-live real com `CAMPAIGN_FORCE_PHONE` preenchido
 - operacao fora da janela planejada
 
 ## Encerramento da janela

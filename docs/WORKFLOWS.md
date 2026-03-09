@@ -19,6 +19,13 @@ Dependencias:
 - `EVOLUTION_INSTANCE`
 - controles de campanha (`CAMPAIGN_*`)
 
+Contrato operacional:
+
+- o numero enviante vem da `EVOLUTION_INSTANCE`
+- o numero destinatario vem do CSV
+- `CAMPAIGN_FORCE_PHONE` sobrescreve o destinatario apenas em homologacao
+- o workflow preserva numeros com DDI explicito e so adiciona `55` a numeros locais com 10/11 digitos
+
 Quando usar:
 
 - operacao local rapida
@@ -41,6 +48,12 @@ Dependencias:
 - `LEADS_SHEET_ID`
 - `OPENAI_API_KEY`
 - `EVOLUTION_*`
+
+Contrato operacional:
+
+- o numero enviante vem da `EVOLUTION_INSTANCE`
+- o numero destinatario vem da planilha Google
+- o workflow preserva numeros com DDI explicito e so adiciona `55` a numeros locais com 10/11 digitos
 
 Quando usar:
 

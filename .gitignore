@@ -11,6 +11,7 @@ venv/
 planilhas/
 saida/
 tmp_n8n_execute.json
+tmp_n8n_execute*.json
 *.log
 
 .claude/

@@ -32,6 +32,17 @@ Para subir o projeto em um notebook novo com o menor risco:
 7. Importe o workflow JSON desejado via `Import from File`.
 8. Configure as credenciais no n8n e execute um dry run antes de qualquer envio real.
 
+## Status validado
+
+Validacao operacional concluida em 2026-03-09 no fluxo local `workflow_planilha_whatsapp_teste.json`:
+
+- stack `n8n + Evolution API + PostgreSQL + Redis` subiu com sucesso
+- a instancia `EVOLUTION_INSTANCE` pareada define o numero enviante
+- o numero do cliente vem da planilha e nao da instancia
+- `CAMPAIGN_FORCE_PHONE` deve ficar preenchido apenas em homologacao
+- o workflow local e o workflow Google Sheets preservam numeros com DDI explicito e so prefixam `55` em numeros locais com 10/11 digitos
+- houve execucao real controlada com `envio_ok=true` e `provider_message_id` retornado pela Evolution API
+
 ## Modos de operacao
 
 ### 1. CSV local + Evolution API
@@ -123,6 +134,7 @@ python scripts/fix_import.py 1AbCdEfGhIjKlMnOpQrStUvWxYz
 - [Setup local](docs/SETUP.md)
 - [Checklist rapido de 15 minutos](docs/QUICKSTART_15_MIN.md)
 - [Deploy no notebook](docs/DEPLOY_NOTEBOOK.md)
+- [Go-live real no notebook](docs/GO_LIVE_REAL.md)
 - [Runbook operacional](docs/RUNBOOK.md)
 - [Mapa de workflows e arquivos](docs/WORKFLOWS.md)
 
@@ -136,7 +148,7 @@ python scripts/fix_import.py 1AbCdEfGhIjKlMnOpQrStUvWxYz
 
 ## Proximos passos antes de operacao real
 
-1. Confirmar qual modo sera usado amanha.
-2. Validar credenciais no notebook da empresa.
-3. Fazer um dry run com poucos contatos.
-4. So entao liberar lote real.
+1. Confirmar qual modo sera usado no notebook da empresa.
+2. Validar `EVOLUTION_INSTANCE` e o numero enviante antes do primeiro disparo.
+3. Executar um teste controlado com `CAMPAIGN_FORCE_PHONE`.
+4. Limpar `CAMPAIGN_FORCE_PHONE`, rodar 1 contato real e so depois escalar o lote.

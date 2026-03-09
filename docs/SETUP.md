@@ -44,6 +44,7 @@ Variaveis mais comuns:
 - `CONTACTS_CSV_PATH`
 - `CAMPAIGN_DRY_RUN`
 - `CAMPAIGN_MAX_CONTACTS`
+- `CAMPAIGN_FORCE_PHONE`
 - `CAMPAIGN_START_HOUR`
 - `CAMPAIGN_END_HOUR`
 - `CAMPAIGN_TIMEZONE`
@@ -119,6 +120,12 @@ Os workflows deste repositorio usam `apikey` via variavel de ambiente. Garanta n
 
 Se a instancia ainda nao existir, crie primeiro no manager da Evolution API (`http://localhost:8080/manager`) ou pela API HTTP antes de executar qualquer envio.
 
+Regra importante:
+
+- o numero enviante vem da `EVOLUTION_INSTANCE`
+- o numero destinatario vem da base de contatos
+- `CAMPAIGN_FORCE_PHONE` sobrescreve o destinatario apenas para homologacao
+
 ### OpenAI
 
 Se o workflow usar geracao de texto:
@@ -161,10 +168,17 @@ Depois de importar `workflow_hogar_evolution.json`, selecione manualmente a cred
 Antes de qualquer lote real:
 
 1. Defina `CAMPAIGN_DRY_RUN=true`.
-2. Defina `CAMPAIGN_MAX_CONTACTS=3` ou `5`.
+2. Defina `CAMPAIGN_MAX_CONTACTS=1`.
 3. Se possivel, use `CAMPAIGN_FORCE_PHONE` com um numero controlado.
 4. Execute manualmente o workflow no n8n.
 5. Verifique a execucao item a item.
+
+Antes do primeiro envio real, confirme o numero enviante:
+
+```powershell
+curl.exe -X GET http://localhost:8080/instance/fetchInstances `
+  -H "apikey: SUA_API_KEY"
+```
 
 ## 9. Problemas frequentes
 
@@ -195,3 +209,4 @@ Revise:
 - `EVOLUTION_API_KEY`
 - `EVOLUTION_INSTANCE`
 - URL base usada no workflow
+- se a instancia esta `open` em `fetchInstances`

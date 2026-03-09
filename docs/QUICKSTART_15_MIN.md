@@ -64,7 +64,7 @@ Para o modo CSV local, preencha no minimo:
 - `EVOLUTION_INSTANCE`
 - `CONTACTS_CSV_PATH=/data/saida/planilha_mestre_sem_duplicados.csv`
 - `CAMPAIGN_DRY_RUN=true`
-- `CAMPAIGN_MAX_CONTACTS=3`
+- `CAMPAIGN_MAX_CONTACTS=1`
 - `CAMPAIGN_FORCE_PHONE=<seu_numero>`
 
 Se for usar Google Sheets, adicione tambem:
@@ -141,6 +141,19 @@ curl.exe -X GET http://localhost:8080/instance/connect/SUA_INSTANCIA `
   -H "apikey: SUA_API_KEY"
 ```
 
+Antes do primeiro envio, confirme qual numero vai enviar:
+
+```powershell
+curl.exe -X GET http://localhost:8080/instance/fetchInstances `
+  -H "apikey: SUA_API_KEY"
+```
+
+Confira se:
+
+- `name` bate com `EVOLUTION_INSTANCE`
+- `connectionStatus` esta `open`
+- `number` e o WhatsApp que sera o enviante
+
 ### Minuto 12 a 13
 
 Se voce importou `workflow_hogar_evolution.json`, no n8n:
@@ -180,9 +193,11 @@ Quando o dry run estiver bom:
 
 1. mude `CAMPAIGN_DRY_RUN=false`
 2. mantenha `CAMPAIGN_FORCE_PHONE=<seu_numero>`
-3. execute novamente
-4. valide recebimento
-5. so depois limpe `CAMPAIGN_FORCE_PHONE`
+3. mantenha `CAMPAIGN_MAX_CONTACTS=1`
+4. execute novamente
+5. valide recebimento
+6. so depois limpe `CAMPAIGN_FORCE_PHONE`
+7. faca 1 envio real
 
 ## Se travar
 
@@ -203,6 +218,7 @@ Cheque:
 - `EVOLUTION_API_KEY`
 - `EVOLUTION_INSTANCE`
 - instancia realmente pareada no WhatsApp
+- numero retornado em `fetchInstances`
 
 ### Workflow de planilha falhou
 
