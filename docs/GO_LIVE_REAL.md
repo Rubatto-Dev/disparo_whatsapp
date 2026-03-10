@@ -2,148 +2,131 @@
 
 ## Objetivo
 
-Executar o deploy real no notebook da empresa com uma sequencia unica, curta e segura.
+Executar disparo real com controle de risco e checklist unico.
 
-## O que foi validado em 2026-03-09
+## Regra principal
 
-Nesta maquina local, antes do deploy no notebook, foi validado:
+- Numero que envia vem da `EVOLUTION_INSTANCE`.
+- Numero que recebe vem da planilha.
+- `CAMPAIGN_FORCE_PHONE` so para homologacao.
 
-- stack Docker ativa com `n8n`, `evolution_api`, `evolution_postgres` e `evolution_redis`
-- importacao e execucao do `workflow_planilha_whatsapp_teste.json`
-- retorno real de `provider_message_id` pela Evolution API
-- `envio_ok=true` no node final de classificacao
-- preservacao do numero original vindo da planilha
-- confirmacao de que o numero enviante depende da `EVOLUTION_INSTANCE`
+## O que ja foi validado
 
-## Regra fixa do numero enviante
+Validado em 2026-03-09:
 
-O numero enviante nunca vem da planilha.
+- stack Docker operacional
+- workflow de CSV funcionando
+- envio real retornando `provider_message_id`
+- filtro por audiencia funcionando
+- saudacao rotativa e delay por perfil funcionando
 
-O numero enviante sempre e o WhatsApp pareado na `EVOLUTION_INSTANCE`.
+## Checklist pre-flight
 
-O numero da planilha sempre entra como destinatario, exceto quando `CAMPAIGN_FORCE_PHONE` esta preenchido.
+1. Docker Desktop ativo.
+2. `docker compose ps` sem falhas.
+3. `.env` revisado.
+4. `CAMPAIGN_DRY_RUN` coerente com a etapa.
+5. `CAMPAIGN_AUDIENCE` definido (`clientes`, `parceiros`, `todos`).
+6. `CAMPAIGN_FORCE_PHONE` coerente (preenchido no teste, vazio em producao).
+7. Instancia Evolution com `connectionStatus=open`.
 
-## Checklist de pre-flight no notebook
-
-1. Docker Desktop aberto e engine Linux pronto.
-2. Repositorio clonado.
-3. `.env` criado a partir de `.env.example`.
-4. `EVOLUTION_API_KEY` preenchida.
-5. `EVOLUTION_INSTANCE` preenchida.
-6. `saida/planilha_mestre_sem_duplicados.csv` presente se o modo for CSV local.
-7. Workflow correto importado no n8n.
-8. Credenciais Google configuradas se o modo for Google Sheets.
-
-## Confirmar qual numero vai enviar
-
-Antes de qualquer disparo:
+## Confirmar numero enviante
 
 ```powershell
 curl.exe -X GET http://localhost:8080/instance/fetchInstances `
   -H "apikey: SUA_API_KEY"
 ```
 
-No retorno, confirme:
+Confirme `name`, `connectionStatus` e `number`.
 
-- `name` igual a `EVOLUTION_INSTANCE`
-- `connectionStatus` igual a `open`
-- `number` igual ao WhatsApp que deve enviar
+## Sequencia oficial de liberacao
 
-## Sequencia recomendada para hoje
+### Etapa 1 - Dry run
 
-### Etapa 1. Dry run
+```env
+CAMPAIGN_DRY_RUN=true
+CAMPAIGN_MAX_CONTACTS=1
+CAMPAIGN_AUDIENCE=clientes
+CAMPAIGN_FORCE_PHONE=5562999999999
+```
 
-Use:
-
-- `CAMPAIGN_DRY_RUN=true`
-- `CAMPAIGN_FORCE_PHONE=<SEU_NUMERO>`
-- `CAMPAIGN_MAX_CONTACTS=1`
-
-Depois:
+Aplicar:
 
 ```powershell
 docker compose up -d --force-recreate n8n
 ```
 
-Execute manualmente o workflow e confirme:
+Executar manualmente no n8n e validar texto/filtro.
 
-- parsing do CSV sem erro
-- filtro retorna 1 contato
-- mensagem final aceitavel
+### Etapa 2 - Teste real controlado
 
-### Etapa 2. Teste controlado com envio real
-
-Use:
-
-- `CAMPAIGN_DRY_RUN=false`
-- `CAMPAIGN_FORCE_PHONE=<SEU_NUMERO>`
-- `CAMPAIGN_MAX_CONTACTS=1`
-
-Depois:
-
-```powershell
-docker compose up -d --force-recreate n8n
+```env
+CAMPAIGN_DRY_RUN=false
+CAMPAIGN_MAX_CONTACTS=1
+CAMPAIGN_AUDIENCE=clientes
+CAMPAIGN_FORCE_PHONE=5562999999999
 ```
 
-Execute manualmente o workflow e confirme no n8n:
+Validar:
 
-- `phone_destino` igual ao seu numero
-- `envio_ok=true`
-- `envio_status=enviado`
-- `provider_message_id` preenchido
-
-### Etapa 3. Primeiro contato real
-
-Use:
-
-- `CAMPAIGN_DRY_RUN=false`
-- `CAMPAIGN_FORCE_PHONE=` vazio
-- `CAMPAIGN_MAX_CONTACTS=1`
-
-Depois:
-
-```powershell
-docker compose up -d --force-recreate n8n
-```
-
-Execute manualmente o workflow e confirme no n8n:
-
-- `phone_original` igual ao numero da planilha
-- `phone_destino` igual ao numero da planilha
+- mensagem recebida no numero de teste
 - `envio_ok=true`
 - `provider_message_id` preenchido
 
-## Escalada de volume
+### Etapa 3 - Primeiro envio real da planilha
 
-Somente depois do primeiro contato real:
+```env
+CAMPAIGN_DRY_RUN=false
+CAMPAIGN_MAX_CONTACTS=1
+CAMPAIGN_AUDIENCE=clientes
+CAMPAIGN_FORCE_PHONE=
+```
 
-1. `CAMPAIGN_MAX_CONTACTS=20`
-2. validar a execucao inteira
-3. `CAMPAIGN_MAX_CONTACTS=50`
-4. validar novamente
-5. `CAMPAIGN_MAX_CONTACTS=100`
+Validar:
 
-Nao escale se houver repeticao de erro no mesmo bloco.
+- `phone_original` = planilha
+- `phone_destino` = planilha
+- `provider_message_id` preenchido
+
+### Etapa 4 - Escalar em lotes
+
+Sugestao:
+
+1. 20 contatos
+2. 50 contatos
+3. 100 contatos
+4. 200 contatos
+
+Nao escalar se houver erro repetido.
+
+## Configuracao anti-ban recomendada
+
+```env
+CAMPAIGN_GREETING_STRATEGY=rotativo
+CAMPAIGN_DELAY_PROFILE=20-35|40-70|75-120
+CAMPAIGN_DELAY_SWITCH_EVERY=8
+CAMPAIGN_USE_AT_MENTION=false
+CAMPAIGN_START_HOUR=0
+CAMPAIGN_END_HOUR=23
+```
 
 ## Rollback imediato
 
 Se algo sair do esperado:
 
-1. pare a execucao ativa
-2. defina `CAMPAIGN_DRY_RUN=true`
-3. defina `CAMPAIGN_MAX_CONTACTS=1`
-4. se necessario, volte a usar `CAMPAIGN_FORCE_PHONE=<SEU_NUMERO>`
-5. recrie o n8n
+1. Pausar workflow.
+2. Voltar `CAMPAIGN_DRY_RUN=true`.
+3. Definir `CAMPAIGN_MAX_CONTACTS=1`.
+4. Opcional: voltar `CAMPAIGN_FORCE_PHONE` para numero controlado.
+5. Recriar n8n.
 
 ```powershell
 docker compose up -d --force-recreate n8n
 ```
 
-## Evidencia minima de liberacao
+## Evidencia minima para liberar producao
 
-Considere o notebook liberado para operacao real apenas quando houver:
-
-- `fetchInstances` mostrando a instancia correta aberta
-- 1 teste controlado entregue ao seu numero
-- 1 envio real entregue ao numero vindo da planilha
-- `provider_message_id` registrado no n8n
+- Instancia correta aberta no `fetchInstances`.
+- 1 teste real controlado entregue.
+- 1 envio real da planilha entregue.
+- `provider_message_id` registrado no n8n.

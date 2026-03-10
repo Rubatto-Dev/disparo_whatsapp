@@ -6,9 +6,10 @@
 
 Objetivo:
 
-- ler CSV local da pasta `saida`
+- ler CSV local
 - filtrar contatos validos
-- montar mensagem por template
+- deduplicar por telefone normalizado
+- montar mensagem variavel
 - enviar por Evolution API
 
 Dependencias:
@@ -17,77 +18,58 @@ Dependencias:
 - `EVOLUTION_BASE_URL`
 - `EVOLUTION_API_KEY`
 - `EVOLUTION_INSTANCE`
-- controles de campanha (`CAMPAIGN_*`)
+- variaveis `CAMPAIGN_*`
 
-Contrato operacional:
+Controles principais:
 
-- o numero enviante vem da `EVOLUTION_INSTANCE`
-- o numero destinatario vem do CSV
-- `CAMPAIGN_FORCE_PHONE` sobrescreve o destinatario apenas em homologacao
-- o workflow preserva numeros com DDI explicito e so adiciona `55` a numeros locais com 10/11 digitos
+- `CAMPAIGN_AUDIENCE` (`clientes`, `parceiros`, `todos`)
+- `CAMPAIGN_DRY_RUN`
+- `CAMPAIGN_FORCE_PHONE`
+- `CAMPAIGN_GREETING_STRATEGY`
+- `CAMPAIGN_DELAY_PROFILE`
+- `CAMPAIGN_DELAY_SWITCH_EVERY`
 
-Quando usar:
+Contratos fixos:
 
-- operacao local rapida
-- teste controlado
-- campanha com base ja consolidada em CSV
+- enviante = `EVOLUTION_INSTANCE`
+- destinatario = planilha (ou `CAMPAIGN_FORCE_PHONE` em homologacao)
+- dedupe no lote por telefone normalizado
 
 ### `workflow_hogar_evolution.json`
 
 Objetivo:
 
 - ler leads do Google Sheets
-- filtrar e segmentar
-- gerar mensagem via OpenAI
+- gerar mensagem (quando aplicavel)
 - enviar por Evolution API
-- gravar status e logs no Google Sheets
+- gravar status/log em planilha
 
 Dependencias:
 
-- Google Sheets OAuth2 no n8n
+- credencial Google Sheets OAuth2 no n8n
 - `LEADS_SHEET_ID`
-- `OPENAI_API_KEY`
+- `OPENAI_API_KEY` (quando houver node de IA)
 - `EVOLUTION_*`
-
-Contrato operacional:
-
-- o numero enviante vem da `EVOLUTION_INSTANCE`
-- o numero destinatario vem da planilha Google
-- o workflow preserva numeros com DDI explicito e so adiciona `55` a numeros locais com 10/11 digitos
-
-Quando usar:
-
-- operacao rastreavel com status em planilha
-- fluxo mais proximo de producao
 
 ## Scripts
 
 ### `scripts/consolidar_planilhas.py`
 
-Funcao:
-
-- consolida arquivos `.xlsx` e `.csv` de `planilhas/`
-- deduplica contatos por telefone
-- classifica grupos em `cliente` ou `corretor_parceiro`
-- produz arquivos limpos na pasta `saida/`
+- consolida arquivos de `planilhas/`
+- limpa e deduplica contatos
+- gera CSVs de saida para operacao
 
 ### `scripts/setup_google_sheets.py`
 
-Funcao:
-
-- cria uma planilha Google do zero
-- cria as abas `Leads`, `envios_log` e `envios_erros`
-- importa os CSVs preparados
+- cria planilha e abas padrao
+- importa base
 - atualiza `LEADS_SHEET_ID` no `.env`
 
 ### `scripts/fix_import.py`
 
-Funcao:
+- reimporta base em planilha Google existente
 
-- reimporta os leads em uma planilha ja existente
-- usa `LEADS_SHEET_ID` do `.env` ou argumento manual
-
-## Compose files
+## Infra
 
 ### `docker-compose.yml`
 
@@ -98,20 +80,9 @@ Stack principal:
 - `evolution_postgres`
 - `evolution_redis`
 
-## Arquivos locais nao versionados
+## Arquivos locais que NAO sobem para Git
 
-### `planilhas/`
-
-Contem exportacoes brutas. Nao deve subir ao GitHub.
-
-### `saida/`
-
-Contem CSVs derivados e dados processados. Nao deve subir ao GitHub.
-
-### `.env`
-
-Contem segredos e configuracao local. Nao deve subir ao GitHub.
-
-### `google_token.json`
-
-Contem token OAuth do Google. Nao deve subir ao GitHub.
+- `planilhas/`
+- `saida/`
+- `.env`
+- `google_token.json`

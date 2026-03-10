@@ -2,17 +2,15 @@
 
 ## Objetivo
 
-Subir o projeto em uma maquina nova com o menor numero possivel de decisoes improvisadas.
+Subir o projeto em maquina nova com configuracao previsivel.
 
 ## Pre-requisitos
 
-Instale antes de comecar:
+- Docker Desktop (engine Linux ativo)
+- Git
+- Python 3.11+ (apenas para scripts)
 
-- Docker Desktop com engine Linux ativo
-- Python 3.11+ se for usar os scripts de consolidacao/importacao
-- Acesso as credenciais necessarias para o modo de operacao escolhido
-
-Validacoes rapidas:
+Validar:
 
 ```powershell
 docker --version
@@ -20,51 +18,31 @@ docker compose version
 python --version
 ```
 
-## 1. Clonar e preparar variaveis
+## 1) Clonar e preparar `.env`
 
 ```powershell
-git clone <URL_DO_REPOSITORIO>
+git clone https://github.com/Rubatto-Dev/disparo_whatsapp.git
 cd disparo_whatsapp
 Copy-Item .env.example .env
 ```
 
-Edite `.env` e preencha somente o necessario para o fluxo que sera usado.
+## 2) Preencher variaveis essenciais
 
-Variaveis mais comuns:
+Minimo para workflow CSV local:
 
-- `OPENAI_API_KEY`
-- `LEADS_SHEET_ID`
-- `LEADS_SHEET_NAME`
-- `LEADS_LOG_SHEET_NAME`
-- `LEADS_ERROR_SHEET_NAME`
-- `GOOGLE_DESKTOP_CLIENT_ID`
-- `GOOGLE_DESKTOP_CLIENT_SECRET`
 - `EVOLUTION_API_KEY`
 - `EVOLUTION_INSTANCE`
-- `CONTACTS_CSV_PATH`
-- `CAMPAIGN_DRY_RUN`
-- `CAMPAIGN_MAX_CONTACTS`
-- `CAMPAIGN_FORCE_PHONE`
-- `CAMPAIGN_START_HOUR`
-- `CAMPAIGN_END_HOUR`
-- `CAMPAIGN_TIMEZONE`
+- `CONTACTS_CSV_PATH=/data/saida/planilha_mestre_segmentada.csv`
+- `CAMPAIGN_DRY_RUN=true`
+- `CAMPAIGN_MAX_CONTACTS=1`
+- `CAMPAIGN_AUDIENCE=clientes`
+- `CAMPAIGN_FORCE_PHONE=seu_numero_de_teste`
 
-## 2. Instalar dependencias Python
-
-Se voce vai usar `scripts/setup_google_sheets.py` ou `scripts/fix_import.py`:
-
-```powershell
-python -m venv .venv
-.\.venv\Scripts\Activate.ps1
-pip install -r requirements.txt
-```
-
-## 3. Subir a stack local
-
-Com o Docker Desktop ja iniciado:
+## 3) Subir stack
 
 ```powershell
 docker compose up -d
+docker compose ps
 ```
 
 Servicos esperados:
@@ -74,139 +52,43 @@ Servicos esperados:
 - `evolution_postgres`
 - `evolution_redis`
 
-Verifique:
+## 4) Abrir n8n e importar workflow
 
-```powershell
-docker compose ps
-```
+No n8n (`http://localhost:5678`):
 
-## 4. Abrir o n8n
-
-- URL local: `http://localhost:5678`
-- Primeiro acesso: crie o usuario administrativo se o n8n pedir
-
-## 5. Importar o workflow
-
-No Editor do n8n:
-
-1. Abra um workflow vazio.
-2. Menu de tres pontos no canto superior direito.
+1. Abrir workflow vazio.
+2. Menu de tres pontos.
 3. `Import from File`.
-4. Selecione o JSON do workflow desejado.
+4. Selecionar `workflow_planilha_whatsapp_teste.json`.
 
-Arquivos principais:
-
-- `workflow_planilha_whatsapp_teste.json`
-- `workflow_hogar_evolution.json`
-
-## 6. Configurar credenciais no n8n
-
-### Google Sheets OAuth2
-
-Necessario para `workflow_hogar_evolution.json`.
-
-Preencha no n8n:
-
-- Client ID
-- Client Secret
-- Redirect URI: `http://localhost:5678/rest/oauth2-credential/callback`
-
-### Evolution API
-
-Os workflows deste repositorio usam `apikey` via variavel de ambiente. Garanta no `.env`:
-
-- `EVOLUTION_API_KEY`
-- `EVOLUTION_INSTANCE`
-
-Se a instancia ainda nao existir, crie primeiro no manager da Evolution API (`http://localhost:8080/manager`) ou pela API HTTP antes de executar qualquer envio.
-
-Regra importante:
-
-- o numero enviante vem da `EVOLUTION_INSTANCE`
-- o numero destinatario vem da base de contatos
-- `CAMPAIGN_FORCE_PHONE` sobrescreve o destinatario apenas para homologacao
-
-### OpenAI
-
-Se o workflow usar geracao de texto:
-
-- `OPENAI_API_KEY`
-
-## 7. Preparar a base de contatos
-
-### Opcao A: planilhas exportadas
-
-Coloque os arquivos em `planilhas/` e rode:
-
-```powershell
-python scripts/consolidar_planilhas.py
-```
-
-O arquivo padrao esperado pelo workflow local e:
-
-- `saida/planilha_mestre_sem_duplicados.csv`
-
-### Opcao B: Google Sheets
-
-Se quiser criar a planilha do zero:
-
-```powershell
-python scripts/setup_google_sheets.py
-```
-
-O script:
-
-- abre o OAuth local na primeira execucao
-- cria as abas `Leads`, `envios_log` e `envios_erros`
-- grava `LEADS_SHEET_ID` no `.env`
-- usa `saida/planilha_mestre_sem_duplicados.csv` como fonte padrao quando os CSVs legados de importacao nao existem
-
-Depois de importar `workflow_hogar_evolution.json`, selecione manualmente a credencial Google Sheets criada nos nodes correspondentes, porque o arquivo JSON entra com placeholder de credencial.
-
-## 8. Primeiro teste
-
-Antes de qualquer lote real:
-
-1. Defina `CAMPAIGN_DRY_RUN=true`.
-2. Defina `CAMPAIGN_MAX_CONTACTS=1`.
-3. Se possivel, use `CAMPAIGN_FORCE_PHONE` com um numero controlado.
-4. Execute manualmente o workflow no n8n.
-5. Verifique a execucao item a item.
-
-Antes do primeiro envio real, confirme o numero enviante:
+## 5) Confirmar instancia Evolution
 
 ```powershell
 curl.exe -X GET http://localhost:8080/instance/fetchInstances `
   -H "apikey: SUA_API_KEY"
 ```
 
-## 9. Problemas frequentes
+Validar:
 
-### `docker compose ps` falha
+- `name` = `EVOLUTION_INSTANCE`
+- `connectionStatus` = `open`
+- `number` = numero que deve enviar
 
-Causa comum: Docker Desktop nao esta iniciado.
-
-### n8n abre, mas o workflow nao le variaveis
-
-Recrie o servico apos editar `.env`:
+## 6) Aplicar variaveis apos qualquer alteracao
 
 ```powershell
 docker compose up -d --force-recreate n8n
 ```
 
-### Google OAuth nao conecta
+## 7) Primeiro teste seguro
 
-Confira no Google Cloud:
+1. `CAMPAIGN_DRY_RUN=true`
+2. `CAMPAIGN_MAX_CONTACTS=1`
+3. Executar manualmente no n8n
+4. Revisar resultado
 
-- `Google Sheets API` habilitada
-- `Google Drive API` habilitada
-- redirect URI exatamente igual ao usado no n8n
+## 8) Documentos recomendados
 
-### Evolution API responde 401/403
-
-Revise:
-
-- `EVOLUTION_API_KEY`
-- `EVOLUTION_INSTANCE`
-- URL base usada no workflow
-- se a instancia esta `open` em `fetchInstances`
+- `docs/GUIA_LEIGOS_OPERACAO_WHATSAPP.md`
+- `docs/MATRIZ_VARIAVEIS_CAMPANHA.md`
+- `docs/TEMPLATES_E_DADOS_MENSAGEM.md`
