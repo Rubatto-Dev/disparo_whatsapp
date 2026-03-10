@@ -10,13 +10,15 @@ Este projeto nao e app web. Ele entrega:
 
 ## Estado atual validado
 
-Validacao operacional local concluida em **2026-03-09**:
+Validacao operacional local concluida em **2026-03-10**:
 
 - stack Docker subiu corretamente
 - leitura de CSV validada
 - filtro por audiencia (`clientes`, `parceiros`, `todos`) validado
 - execucao real controlada validada com `provider_message_id`
-- anti-ban com saudacao rotativa e delays por perfil aplicado
+- anti-ban com saudacao rotativa, delays por perfil e pausa longa aleatoria aplicado
+- kill switch por erros consecutivos com alerta opcional aplicado
+- persistencia de status por campanha no CSV aplicada
 
 ## Inicio rapido (leigos)
 
@@ -127,6 +129,7 @@ python scripts/fix_import.py
 - [Guia para leigos](docs/GUIA_LEIGOS_OPERACAO_WHATSAPP.md)
 - [Templates e dados de mensagem](docs/TEMPLATES_E_DADOS_MENSAGEM.md)
 - [Matriz de variaveis da campanha](docs/MATRIZ_VARIAVEIS_CAMPANHA.md)
+- [Atualizacoes de producao (2026-03-10)](docs/ATUALIZACOES_2026_03_10.md)
 - [Setup local](docs/SETUP.md)
 - [Checklist rapido de 15 minutos](docs/QUICKSTART_15_MIN.md)
 - [Deploy no notebook](docs/DEPLOY_NOTEBOOK.md)
@@ -146,3 +149,5 @@ python scripts/fix_import.py
 ## Observacao sobre lotes grandes
 
 A plataforma suporta milhares de contatos, mas operar lote unico muito grande aumenta risco operacional e bloqueio. Use lotes graduais com monitoramento entre execucoes.
+
+
