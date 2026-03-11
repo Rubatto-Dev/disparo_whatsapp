@@ -13,6 +13,18 @@ saida/
 tmp_n8n_execute.json
 tmp_n8n_execute*.json
 *.log
+execution_*.json
+workflow_live_*.json
+workflow_active_*.json
+workflow_after_patch.json
+workflow_verify_agent.json
+workflow_segmentado_*.json
+workflow_current_for_segmentation.json
+workflow_agent_validator.json
+montar_template_teste.current.js
+evolution_manager_bundle*.js
+evolution_swagger.json
+evolution_qr_*.png
 
 .claude/
 ESTADO_SESSAO.md

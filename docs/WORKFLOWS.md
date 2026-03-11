@@ -2,15 +2,20 @@
 
 ## Workflows JSON
 
+### Matriz operacional
+
+- Teste e producao (CSV local): `workflow_planilha_whatsapp_teste.json`
+- Operacao Google Sheets/OpenAI (opcional): `workflow_hogar_evolution.json`
+
 ### `workflow_planilha_whatsapp_teste.json`
 
 Objetivo:
 
-- ler CSV local
-- filtrar contatos validos
-- deduplicar por telefone normalizado
-- montar mensagem variavel
+- ler CSV local da pasta `saida`
+- filtrar contatos validos (audiencia atual: `parceiros`)
+- montar mensagem por template com variacao aleatoria
 - enviar por Evolution API
+- registrar resultado e controlar risco de bloqueio
 
 Dependencias:
 
@@ -18,58 +23,74 @@ Dependencias:
 - `EVOLUTION_BASE_URL`
 - `EVOLUTION_API_KEY`
 - `EVOLUTION_INSTANCE`
-- variaveis `CAMPAIGN_*`
+- controles de campanha (`CAMPAIGN_*`)
+- `CAMPAIGN_SEND_LOCK` (trava de envio real)
+- `CAMPAIGN_TYPING_*` (simulacao de digitando)
 
-Controles principais:
+Quando usar:
 
-- `CAMPAIGN_AUDIENCE` (`clientes`, `parceiros`, `todos`)
-- `CAMPAIGN_DRY_RUN`
-- `CAMPAIGN_FORCE_PHONE`
-- `CAMPAIGN_GREETING_STRATEGY`
-- `CAMPAIGN_DELAY_PROFILE`
-- `CAMPAIGN_DELAY_SWITCH_EVERY`
-
-Contratos fixos:
-
-- enviante = `EVOLUTION_INSTANCE`
-- destinatario = planilha (ou `CAMPAIGN_FORCE_PHONE` em homologacao)
-- dedupe no lote por telefone normalizado
+- operacao local rapida
+- teste controlado
+- campanha com base ja consolidada em CSV
+- operacao com anti-ban ativo (delay variavel + kill switch)
 
 ### `workflow_hogar_evolution.json`
 
 Objetivo:
 
 - ler leads do Google Sheets
-- gerar mensagem (quando aplicavel)
+- filtrar e segmentar
+- gerar mensagem via OpenAI
 - enviar por Evolution API
-- gravar status/log em planilha
+- gravar status e logs no Google Sheets
 
 Dependencias:
 
-- credencial Google Sheets OAuth2 no n8n
+- Google Sheets OAuth2 no n8n
 - `LEADS_SHEET_ID`
-- `OPENAI_API_KEY` (quando houver node de IA)
+- `OPENAI_API_KEY`
 - `EVOLUTION_*`
+
+Quando usar:
+
+- operacao rastreavel com status em planilha
+- fluxo mais proximo de producao
 
 ## Scripts
 
 ### `scripts/consolidar_planilhas.py`
 
-- consolida arquivos de `planilhas/`
-- limpa e deduplica contatos
-- gera CSVs de saida para operacao
+Funcao:
+
+- consolida arquivos `.xlsx` e `.csv` de `planilhas/`
+- deduplica contatos por telefone
+- classifica grupos em `cliente` ou `corretor_parceiro`
+- produz arquivos limpos na pasta `saida/`
 
 ### `scripts/setup_google_sheets.py`
 
-- cria planilha e abas padrao
-- importa base
+Funcao:
+
+- cria uma planilha Google do zero
+- cria as abas `Leads`, `envios_log` e `envios_erros`
+- importa os CSVs preparados
 - atualiza `LEADS_SHEET_ID` no `.env`
 
 ### `scripts/fix_import.py`
 
-- reimporta base em planilha Google existente
+Funcao:
 
-## Infra
+- reimporta os leads em uma planilha ja existente
+- usa `LEADS_SHEET_ID` do `.env` ou argumento manual
+
+### `scripts/formatar_planilha_visual.ps1`
+
+Funcao:
+
+- gerar planilha Excel visual a partir de CSV segmentado
+- aplicar validacoes, formatacao e guias para revisao operacional
+
+## Compose files
 
 ### `docker-compose.yml`
 
@@ -80,9 +101,26 @@ Stack principal:
 - `evolution_postgres`
 - `evolution_redis`
 
-## Arquivos locais que NAO sobem para Git
+## Arquivos locais nao versionados
 
-- `planilhas/`
-- `saida/`
-- `.env`
-- `google_token.json`
+### `planilhas/`
+
+Contem exportacoes brutas. Nao deve subir ao GitHub.
+
+### `saida/`
+
+Contem CSVs derivados e dados processados. Nao deve subir ao GitHub.
+
+### `.env`
+
+Contem segredos e configuracao local. Nao deve subir ao GitHub.
+
+### `google_token.json`
+
+Contem token OAuth do Google. Nao deve subir ao GitHub.
+
+## Higiene de repositorio
+
+- snapshots de workflow (`workflow_live_*`, `workflow_active_*`) nao sao canonicos e devem ficar fora do Git
+- artefatos de execucao (`execution_*.json`, logs de teste, QR temporario) devem ficar fora do Git
+- o estado operacional atual deve ser mantido em `docs/SESSION_STATE.md`

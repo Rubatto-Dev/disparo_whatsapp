@@ -2,131 +2,148 @@
 
 ## Objetivo
 
-Executar lotes de envio com previsibilidade, risco controlado e rollback simples.
+Executar um lote de envio com controle de risco, capacidade de rollback e checklist claro.
 
-## Pre-flight obrigatorio
+## Pre-flight
 
-Antes de cada lote, confirmar:
+Confirme antes de cada operacao:
 
-1. Docker Desktop ativo.
-2. `docker compose ps` com stack saudavel.
-3. `.env` revisado.
-4. `CAMPAIGN_DRY_RUN` coerente com etapa.
-5. `CAMPAIGN_AUDIENCE` correto para o lote.
-6. `CAMPAIGN_FORCE_PHONE` coerente (teste vs producao).
-7. Evolution `connectionStatus=open`.
-8. Workflow correto ativo no n8n.
+1. Docker Desktop esta ativo.
+2. `docker compose ps` mostra os containers esperados.
+3. O `.env` contem as variaveis do fluxo escolhido.
+4. A base de contatos foi revisada.
+5. O workflow correto foi importado e salvo no n8n.
+6. As credenciais do n8n foram testadas.
+7. `CAMPAIGN_DRY_RUN` esta coerente com a etapa atual.
+8. `CAMPAIGN_SEND_LOCK` esta coerente com a etapa atual (trava ativa fora de janela de envio real).
 
-## Regras fixas de destino
+## Estrategia recomendada
 
-- Enviante: sempre `EVOLUTION_INSTANCE`.
-- Destino: sempre planilha.
-- Excecao: `CAMPAIGN_FORCE_PHONE` em homologacao.
+### Etapa 1. Dry run
 
-## Sequencia de operacao recomendada
+Use para validar parsing, filtros, mensagens e payloads sem envio real.
 
-### Etapa 1 - Validacao sem envio
+Configuracao sugerida:
 
-```env
-CAMPAIGN_DRY_RUN=true
-CAMPAIGN_MAX_CONTACTS=1
-CAMPAIGN_FORCE_PHONE=5562999999999
-```
+- `CAMPAIGN_SEND_LOCK=true`
+- `CAMPAIGN_DRY_RUN=true`
+- `CAMPAIGN_MAX_CONTACTS=3`
 
-### Etapa 2 - Teste real controlado
+Criterio de saida:
 
-```env
-CAMPAIGN_DRY_RUN=false
-CAMPAIGN_MAX_CONTACTS=1
-CAMPAIGN_FORCE_PHONE=5562999999999
-```
+- workflow executa do inicio ao fim sem erro critico
+- contatos filtrados fazem sentido
+- mensagem final esta aceitavel
 
-### Etapa 3 - Primeiro real da planilha
+### Etapa 2. Teste controlado
 
-```env
-CAMPAIGN_DRY_RUN=false
-CAMPAIGN_MAX_CONTACTS=1
-CAMPAIGN_FORCE_PHONE=
-```
+Use para mandar apenas para um numero sob controle.
 
-### Etapa 4 - Escalada gradual
+Configuracao sugerida:
 
-1. `CAMPAIGN_MAX_CONTACTS=20`
-2. `CAMPAIGN_MAX_CONTACTS=50`
-3. `CAMPAIGN_MAX_CONTACTS=100`
-4. `CAMPAIGN_MAX_CONTACTS=200`
+- `CAMPAIGN_SEND_LOCK=false`
+- `CAMPAIGN_DRY_RUN=false`
+- `CAMPAIGN_FORCE_PHONE=<SEU_NUMERO_DE_TESTE>`
+- `CAMPAIGN_MAX_CONTACTS=3`
 
-## Filtro de publico
+Criterio de saida:
 
-- `CAMPAIGN_AUDIENCE=clientes`
-- `CAMPAIGN_AUDIENCE=parceiros`
-- `CAMPAIGN_AUDIENCE=todos`
+- mensagem chega corretamente
+- payload do provedor retorna sucesso
+- logs/status ficam consistentes
 
-## Anti-ban padrao
+### Etapa 3. Go-live limitado
 
-```env
-CAMPAIGN_GREETING_STRATEGY=rotativo
-CAMPAIGN_DELAY_PROFILE=20-35|40-70|75-120
-CAMPAIGN_DELAY_SWITCH_EVERY=8
-CAMPAIGN_USE_AT_MENTION=false
-CAMPAIGN_START_HOUR=0
-CAMPAIGN_END_HOUR=23
-```
+Configuracao sugerida:
 
-## Tempo estimado de lotes
+- `CAMPAIGN_SEND_LOCK=false`
+- `CAMPAIGN_FORCE_PHONE=` vazio
+- `CAMPAIGN_MAX_CONTACTS=20`
 
-Com delay medio de ~55 a 60s por mensagem:
+Suba gradualmente:
 
-- 100 mensagens: ~1h40 a ~1h50
-- 500 mensagens: ~9h a ~10h
-- 6000 mensagens: ~90h a ~100h (precisa quebrar em lotes)
+1. 20 contatos
+2. 50 contatos
+3. 100 contatos
 
-## Monitoramento durante lote
+Nao escale volume se houver erro repetido no mesmo bloco.
 
-Observar no n8n:
+## Monitoramento
 
-- `phone_destino`
-- `envio_ok`
-- `provider_message_id`
-- `erro_envio`
-- variacao de delays
+Durante a operacao, observe:
 
-## Rollback rapido
+- execucoes do n8n
+- resposta do provider de envio
+- atualizacao de status na planilha, se aplicavel
+- tempo medio entre envios
+- erros de autenticacao, rate limit e timeout
 
-Se detectar anomalia:
+## Rollback
 
-1. Pausar workflow.
-2. Definir `CAMPAIGN_DRY_RUN=true`.
-3. Definir `CAMPAIGN_MAX_CONTACTS=1`.
-4. Recriar n8n.
+Se algo sair do esperado:
+
+1. Desative o workflow no n8n.
+2. Ajuste `CAMPAIGN_DRY_RUN=true`.
+3. Limite `CAMPAIGN_MAX_CONTACTS=1`.
+4. Recrie o servico do n8n se houve mudanca em variaveis:
 
 ```powershell
 docker compose up -d --force-recreate n8n
 ```
 
-## Troubleshooting curto
+5. Reexecute manualmente ate estabilizar.
 
-### Sem contatos
+## Troubleshooting rapido
 
-- Verificar `CAMPAIGN_AUDIENCE`.
-- Verificar CSV e telefones validos.
+### Nada foi enviado
 
-### Repeticao de destino
+Verifique:
 
-- Verificar se `CAMPAIGN_FORCE_PHONE` ficou preenchido.
+- janela de envio
+- `CAMPAIGN_DRY_RUN`
+- filtros do workflow
+- base vazia ou sem telefone valido
 
-### Alterou `.env` e nao aplicou
+### Envio falha no provider
 
-- Recriar n8n com `--force-recreate`.
+Verifique:
 
-### Erro na Evolution API
+- credenciais
+- numero de origem
+- formato do telefone
+- instancia/configuracao da Evolution API
 
-- Validar `EVOLUTION_API_KEY`.
-- Validar `EVOLUTION_INSTANCE`.
-- Validar instancia aberta no `fetchInstances`.
+### Planilha nao atualiza
 
-## Encerramento de lote
+Verifique:
 
-1. Registrar volume enviado e falhas.
-2. Registrar configuracao usada no lote.
-3. Definir proximo lote apenas apos revisao.
+- OAuth Google ativo
+- `LEADS_SHEET_ID`
+- nomes exatos das abas
+- mapeamento de colunas do node
+
+### Mudou o `.env` e nada aconteceu
+
+Recrie o container do n8n:
+
+```powershell
+docker compose up -d --force-recreate n8n
+```
+
+## Seguranca operacional
+
+Nunca faca:
+
+- commit de `.env`
+- commit de `google_token.json`
+- commit das planilhas exportadas
+- envio em lote alto sem dry run previo
+- operacao fora da janela planejada
+
+## Encerramento da janela
+
+Ao final do lote:
+
+1. Exportar ou registrar os resultados relevantes.
+2. Salvar observacoes sobre falhas e excecoes.
+3. Confirmar se o workflow deve permanecer ativo ou voltar para manual.

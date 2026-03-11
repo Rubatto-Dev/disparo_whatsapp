@@ -1,153 +1,175 @@
 # Disparo WhatsApp
 
-Repositorio operacional para campanhas WhatsApp com `n8n + Evolution API + PostgreSQL + Redis`.
+Repositorio operacional para preparar bases de contatos, subir a stack local (`n8n + Evolution API + PostgreSQL + Redis`) e executar workflows de disparo controlado no WhatsApp.
 
-Este projeto nao e app web. Ele entrega:
+O projeto nao e um app web tradicional. Ele e um pacote de operacao com tres blocos:
 
-1. Preparacao de base (scripts Python).
-2. Infra local Docker.
-3. Workflows n8n para disparo controlado.
+1. Scripts Python para consolidar exportacoes de contatos e preparar CSVs de trabalho.
+2. Infra local via Docker Compose para rodar n8n e Evolution API.
+3. Workflows n8n em JSON para dois modos oficialmente suportados.
 
-## Estado atual validado
+## Estado do repositorio
 
-Validacao operacional local concluida em **2026-03-10**:
+Este repositorio foi preparado para publicacao segura:
 
-- stack Docker subiu corretamente
-- leitura de CSV validada
-- filtro por audiencia (`clientes`, `parceiros`, `todos`) validado
-- execucao real controlada validada com `provider_message_id`
-- anti-ban com saudacao rotativa, delays por perfil e pausa longa aleatoria aplicado
-- kill switch por erros consecutivos com alerta opcional aplicado
-- persistencia de status por campanha no CSV aplicada
+- credenciais locais ficam fora do Git
+- dados exportados ficam fora do Git
+- artefatos temporarios de execucao ficam fora do Git
+- continuidade operacional fica em `docs/SESSION_STATE.md`
+- a documentacao abaixo descreve o fluxo recomendado para reinstalacao em outra maquina
 
-## Inicio rapido (leigos)
+Recomendacao de publicacao: repositorio privado.
 
-Se voce nao e tecnico, siga esta ordem:
+## Caminho recomendado de operacao
 
-1. [Guia para leigos](docs/GUIA_LEIGOS_OPERACAO_WHATSAPP.md)
-2. [Checklist rapido (15 min)](docs/QUICKSTART_15_MIN.md)
-3. [Go-live real](docs/GO_LIVE_REAL.md)
+Para subir o projeto em um notebook novo com o menor risco:
 
-## Modos oficiais
+1. Clone o repositorio.
+2. Crie `.env` a partir de `.env.example`.
+3. Instale Docker Desktop e confirme que o daemon esta ativo.
+4. Se for usar os scripts de planilha, instale Python 3.11+ e `pip install -r requirements.txt`.
+5. Suba a stack com `docker compose up -d`.
+6. Abra o n8n em `http://localhost:5678`.
+7. Importe o workflow JSON desejado via `Import from File`.
+8. Configure as credenciais no n8n e execute um dry run antes de qualquer envio real.
 
-### 1) CSV local + Evolution API
+## Modos de operacao
 
-Uso para operacao direta com base local.
+### 1. CSV local + Evolution API
 
-- Workflow: `workflow_planilha_whatsapp_teste.json`
-- Entrada: `CONTACTS_CSV_PATH` (default `/data/saida/planilha_mestre_segmentada.csv`)
-- Saida: envio WhatsApp via Evolution API
+Modo mais direto para operacao local.
 
-### 2) Google Sheets + OpenAI + Evolution API
+- Entrada recomendada em execucao: `CONTACTS_CSV_PATH=/home/node/.n8n-files/planilha_mestre_segmentada_nobom.csv`
+- Stack: `docker-compose.yml`
+- Workflow principal: `workflow_planilha_whatsapp_teste.json`
+- Credenciais: `EVOLUTION_API_KEY`, `EVOLUTION_INSTANCE`
+- Controles anti-ban: variacao aleatoria de 4 mensagens, delay variavel, simulacao de digitando, kill switch e trava de envio (`CAMPAIGN_SEND_LOCK`)
+- Audiencia atual do fluxo principal: `parceiros`
 
-Uso para operacao com planilha online e trilha de status.
+Uso indicado quando a base de contatos ja esta consolidada localmente.
+
+### 2. Google Sheets + OpenAI + Evolution API
+
+Modo mais estruturado para operacao com planilha online e geracao de mensagem com IA.
 
 - Workflow: `workflow_hogar_evolution.json`
-- Dependencias: Google OAuth2 + `OPENAI_API_KEY`
+- Credenciais: Google Sheets OAuth2, `OPENAI_API_KEY`, Evolution API
 
-## Regras operacionais criticas
-
-- Numero que envia vem da `EVOLUTION_INSTANCE`.
-- Numero de destino vem da planilha.
-- `CAMPAIGN_FORCE_PHONE` so para homologacao.
-- Em producao, `CAMPAIGN_FORCE_PHONE` deve ficar vazio.
-- Sempre iniciar com `CAMPAIGN_DRY_RUN=true`.
-
-## Anti-ban e controle de risco
-
-Configuracoes adicionadas:
-
-- `CAMPAIGN_GREETING_STRATEGY=rotativo`
-- `CAMPAIGN_DELAY_PROFILE=20-35|40-70|75-120`
-- `CAMPAIGN_DELAY_SWITCH_EVERY=8`
-- `CAMPAIGN_USE_AT_MENTION=false`
-
-Filtro de publico:
-
-- `CAMPAIGN_AUDIENCE=clientes`
-- `CAMPAIGN_AUDIENCE=parceiros`
-- `CAMPAIGN_AUDIENCE=todos`
+Uso indicado quando o time quer rastreabilidade por status/log em planilha.
 
 ## Estrutura do projeto
 
 ```text
 .
 |-- docker-compose.yml
-|-- workflow_planilha_whatsapp_teste.json
 |-- workflow_hogar_evolution.json
+|-- workflow_planilha_whatsapp_teste.json
 |-- scripts/
 |-- docs/
 |-- .env.example
 |-- requirements.txt
 ```
 
-Pastas/arquivos locais ignorados:
+## Matriz de uso (teste e producao)
+
+### Runtime obrigatorio (teste e producao)
+
+- `docker-compose.yml`
+- `.env` (local, nao versionado)
+- `workflow_planilha_whatsapp_teste.json` (fluxo CSV local)
+- `saida/` com base de contatos
+
+### Validacao e apoio operacional
+
+- `docs/` (setup, runbook, variaveis, estado)
+- `scripts/` (preparo e higienizacao de base)
+- `workflow_hogar_evolution.json` (fluxo Google Sheets/OpenAI, quando aplicavel)
+
+### Fora do escopo de runtime
+
+- `.venv/` (ambiente local de desenvolvimento)
+- artefatos temporarios de execucao (todos bloqueados por `.gitignore`)
+
+Diretorios locais ignorados pelo Git:
 
 - `planilhas/`
 - `saida/`
+
+Arquivos locais ignorados pelo Git:
+
 - `.env`
 - `google_token.json`
-
-## Setup resumido
-
-```powershell
-git clone https://github.com/Rubatto-Dev/disparo_whatsapp.git
-cd disparo_whatsapp
-Copy-Item .env.example .env
-docker compose up -d
-```
-
-Acesse:
-
-- n8n: `http://localhost:5678`
-- Evolution manager: `http://localhost:8080/manager`
+- `tmp_n8n_execute.json`
 
 ## Scripts Python
 
-### Consolidar base de contatos
+### Consolidar contatos exportados
 
 ```powershell
 python scripts/consolidar_planilhas.py
 ```
 
-Gera CSVs tratados em `saida/`, incluindo base segmentada para campanha.
+Entrada:
 
-### Criar/atualizar Google Sheets
+- pasta `planilhas/` com arquivos `.xlsx` ou `.csv`
+
+Saida:
+
+- `saida/planilha_mestre_sem_duplicados.csv`
+- `saida/planilha_mestre_clean.csv`
+- `saida/clientes.csv`
+- `saida/corretores_parceiros.csv`
+- demais arquivos auxiliares de auditoria
+
+### Criar e popular Google Sheets
 
 ```powershell
 python scripts/setup_google_sheets.py
 ```
 
-### Reimportar leads em planilha existente
+O script cria a planilha, cria as abas necessarias e atualiza `LEADS_SHEET_ID` no `.env` sem corromper a linha existente. Ele usa por padrao os dados de `saida/planilha_mestre_sem_duplicados.csv` quando os arquivos legados `leads_import_*.csv` nao existirem.
+
+### Reimportar leads em uma planilha existente
 
 ```powershell
 python scripts/fix_import.py
 ```
 
-## Documentacao completa
+O script usa `LEADS_SHEET_ID` do `.env`. Se necessario, voce tambem pode informar o ID manualmente:
 
-- [Guia para leigos](docs/GUIA_LEIGOS_OPERACAO_WHATSAPP.md)
-- [Templates e dados de mensagem](docs/TEMPLATES_E_DADOS_MENSAGEM.md)
-- [Matriz de variaveis da campanha](docs/MATRIZ_VARIAVEIS_CAMPANHA.md)
-- [Atualizacoes de producao (2026-03-10)](docs/ATUALIZACOES_2026_03_10.md)
+```powershell
+python scripts/fix_import.py 1AbCdEfGhIjKlMnOpQrStUvWxYz
+```
+
+## Script visual (PowerShell)
+
+### Formatar planilha segmentada para revisao
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts/formatar_planilha_visual.ps1
+```
+
+Gera uma versao `.xlsx` visual da planilha segmentada com validacoes e destaque de campos operacionais.
+
+## Documentacao
+
+- [Indice da documentacao](docs/INDEX.md)
 - [Setup local](docs/SETUP.md)
-- [Checklist rapido de 15 minutos](docs/QUICKSTART_15_MIN.md)
-- [Deploy no notebook](docs/DEPLOY_NOTEBOOK.md)
-- [Go-live real no notebook](docs/GO_LIVE_REAL.md)
 - [Runbook operacional](docs/RUNBOOK.md)
+- [Variaveis de ambiente](docs/ENVIRONMENT.md)
 - [Mapa de workflows e arquivos](docs/WORKFLOWS.md)
 
-## Fluxo recomendado para producao
+## Observacoes operacionais
 
-1. Subir stack e validar instancia Evolution.
-2. Rodar dry run (`CAMPAIGN_DRY_RUN=true`, `CAMPAIGN_MAX_CONTACTS=1`).
-3. Rodar teste real controlado com `CAMPAIGN_FORCE_PHONE`.
-4. Limpar `CAMPAIGN_FORCE_PHONE`.
-5. Rodar 1 envio real da planilha.
-6. Escalar em lotes graduais (20 > 50 > 100 > 200).
+- `docker compose up -d` sobe os servicos em background; o Compose le variaveis do `.env` por padrao para interpolacao no arquivo.
+- O n8n mantem dados importantes em volume persistente; preserve o volume `n8n_data` entre reinicializacoes.
+- Para importar workflows no n8n, use o menu de tres pontos no Editor e escolha `Import from File`.
+- Nunca publique `.env`, `google_token.json`, planilhas exportadas ou CSVs gerados.
+- O projeto foi reduzido para dois caminhos oficiais. Todo o restante foi tratado como legado e removido do repositorio.
 
-## Observacao sobre lotes grandes
+## Proximos passos antes de operacao real
 
-A plataforma suporta milhares de contatos, mas operar lote unico muito grande aumenta risco operacional e bloqueio. Use lotes graduais com monitoramento entre execucoes.
-
-
+1. Confirmar qual modo sera usado amanha.
+2. Validar credenciais no notebook da empresa.
+3. Fazer um dry run com poucos contatos.
+4. So entao liberar lote real.
