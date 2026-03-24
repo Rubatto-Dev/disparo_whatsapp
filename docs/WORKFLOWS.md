@@ -6,6 +6,7 @@
 
 - Teste e producao (CSV local): `workflow_planilha_whatsapp_teste.json`
 - Operacao Google Sheets/OpenAI (opcional): `workflow_hogar_evolution.json`
+- Operacao inbound (webhook + classificacao): `workflow_inbound_whatsapp_google_sheets.json`
 
 ### `workflow_planilha_whatsapp_teste.json`
 
@@ -55,6 +56,27 @@ Quando usar:
 
 - operacao rastreavel com status em planilha
 - fluxo mais proximo de producao
+
+### `workflow_inbound_whatsapp_google_sheets.json`
+
+Objetivo:
+
+- receber mensagens inbound via webhook
+- normalizar payload Evolution e deduplicar eventos
+- classificar resposta PT-BR (`positivo`, `negativo`, `neutro`)
+- atualizar status na aba `Leads` e registrar logs inbound
+
+Dependencias:
+
+- Google Sheets OAuth2 no n8n
+- `LEADS_SHEET_ID`
+- variaveis `INBOUND_*`
+
+Quando usar:
+
+- monitorar retorno dos contatos apos disparo
+- bloquear automaticamente novos disparos para respostas negativas
+- manter trilha de auditoria inbound em planilha
 
 ## Scripts
 

@@ -1,0 +1,468 @@
+{
+  "name": "Inbound WhatsApp - Google Sheets (classificacao PT-BR + dedupe)",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "={{ $env.INBOUND_WEBHOOK_PATH || 'evolution/inbound' }}",
+        "responseMode": "onReceived",
+        "options": {}
+      },
+      "id": "df36cf61-d649-4260-933b-ccfd96e5fd18",
+      "name": "Webhook Inbound Evolution",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [
+        -920,
+        -40
+      ],
+      "webhookId": "ade2ed38-0ba6-4ba8-b590-e2b6267708b1"
+    },
+    {
+      "parameters": {
+        "jsCode": "const pick = (...vals) => vals.find((v) => v !== undefined && v !== null && String(v).trim() !== '');\nconst get = (obj, path) => path.split('.').reduce((acc, key) => acc?.[key], obj);\n\nconst input = $json || {};\nconst headers = input.headers || {};\nconst payload = input.body || input;\nconst data = payload.data || payload;\nconst key = data.key || payload.key || {};\n\nconst expectedSecret = String($env.INBOUND_WEBHOOK_SECRET || '').trim();\nconst receivedSecret = String(\n  headers['x-inbound-secret']\n    || headers['x_webhook_secret']\n    || headers['x-webhook-secret']\n    || payload.secret\n    || payload.webhook_secret\n    || ''\n).trim();\nconst secret_ok = !expectedSecret || expectedSecret === receivedSecret;\n\nconst event = String(pick(payload.event, data.event, payload.type, payload.action, '')).toLowerCase();\nconst rawJid = String(pick(key.remoteJid, data.remoteJid, payload.remoteJid, data.from, payload.from, '')).trim();\nconst phone_norm = rawJid.replace(/@.+$/, '').replace(/\\D/g, '');\nconst from_me = Boolean(pick(key.fromMe, data.fromMe, payload.fromMe, false));\nconst message_id = String(pick(key.id, data.messageId, payload.messageId, data.id, payload.id, '')).trim();\n\nconst text_original = String(pick(\n  get(data, 'message.conversation'),\n  get(data, 'message.extendedTextMessage.text'),\n  get(data, 'message.imageMessage.caption'),\n  get(data, 'message.videoMessage.caption'),\n  get(data, 'message.buttonsResponseMessage.selectedDisplayText'),\n  get(data, 'message.listResponseMessage.title'),\n  get(payload, 'message.conversation'),\n  get(payload, 'message.extendedTextMessage.text'),\n  get(payload, 'message.imageMessage.caption'),\n  get(payload, 'message.videoMessage.caption'),\n  payload.text,\n  payload.message,\n  ''\n)).trim();\n\nconst text_norm = text_original\n  .normalize('NFD')\n  .replace(/[\\u0300-\\u036f]/g, '')\n  .toLowerCase()\n  .replace(/\\s+/g, ' ')\n  .trim();\n\nconst is_group = /@g\\.us$/.test(rawJid);\nconst is_status = rawJid === 'status@broadcast';\nconst is_inbound_text = secret_ok && !from_me && !!phone_norm && !is_group && !is_status && !!text_norm;\n\nreturn [{\n  json: {\n    raw_payload: payload,\n    event,\n    raw_jid: rawJid,\n    phone_norm,\n    from_me,\n    message_id,\n    text_original,\n    text_norm,\n    is_group,\n    is_status,\n    secret_ok,\n    is_inbound_text,\n    received_at_iso: new Date().toISOString(),\n  },\n}];\n"
+      },
+      "id": "28017cb6-bad9-4f1e-8827-d6ef8a58495b",
+      "name": "Normalizar Evento Inbound",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -700,
+        -40
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 1
+          },
+          "conditions": [
+            {
+              "id": "cond-inbound-eligivel",
+              "leftValue": "={{ Boolean($json.is_inbound_text) && Boolean($json.secret_ok) }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "debbe44c-5348-4a5b-81f5-8735745bff0f",
+      "name": "Evento Elegivel?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        -480,
+        -40
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const ttlMs = Math.max(60, Number($env.INBOUND_DEDUPE_TTL_SECONDS || 172800)) * 1000;\nconst windowSec = Math.max(30, Number($env.INBOUND_DEDUPE_TEXT_WINDOW_SECONDS || 600));\nconst maxKeys = Math.max(1000, Number($env.INBOUND_DEDUPE_MAX_KEYS || 50000));\nconst now = Date.now();\n\nconst hash = (input) => {\n  const s = String(input || '');\n  let h = 0;\n  for (const c of s) h = ((h << 5) - h + c.charCodeAt(0)) | 0;\n  return `h${Math.abs(h)}`;\n};\n\nconst state = $getWorkflowStaticData('global');\nconst store = state.inbound_dedupe_v1 || {};\n\nfor (const [k, v] of Object.entries(store)) {\n  if (!v || !v.ts || (now - Number(v.ts)) > ttlMs) delete store[k];\n}\n\nconst messageKey = String($json.message_id || '').trim();\nconst dedupeByMessage = messageKey ? `msg:${messageKey}` : '';\nconst bucket = Math.floor(now / (windowSec * 1000));\nconst dedupeByText = `txt:${$json.phone_norm}:${hash($json.text_norm)}:${bucket}`;\nconst dedupe_key = dedupeByMessage || dedupeByText;\n\nconst is_duplicate = Boolean(store[dedupe_key]);\nif (!is_duplicate) {\n  store[dedupe_key] = {\n    ts: now,\n    phone: $json.phone_norm,\n    message_id: messageKey,\n  };\n}\n\nconst entries = Object.entries(store);\nif (entries.length > maxKeys) {\n  const toDrop = entries\n    .sort((a, b) => Number(a[1].ts || 0) - Number(b[1].ts || 0))\n    .slice(0, entries.length - maxKeys);\n  for (const [k] of toDrop) delete store[k];\n}\n\nstate.inbound_dedupe_v1 = store;\n\nreturn [{\n  json: {\n    ...$json,\n    dedupe_key,\n    is_duplicate,\n  },\n}];\n"
+      },
+      "id": "19821f08-e0c0-434a-9de5-296b3e928379",
+      "name": "Deduplicar Evento (TTL)",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -260,
+        -160
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 1
+          },
+          "conditions": [
+            {
+              "id": "cond-duplicado",
+              "leftValue": "={{ Boolean($json.is_duplicate) }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "4901f7b5-05b1-41c3-bfb5-776a70e28b8c",
+      "name": "Ja Processado?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        -40,
+        -160
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const t = String($json.text_norm || '');\n\nconst rules = [\n  { cls: 'negativo', w: 6, re: /\\b(nao tenho interesse|sem interesse|nao quero|nao me chame|pare|parar|sair|stop|descad|remov(a|er)|cancele|cancelar)\\b/ },\n  { cls: 'positivo', w: 5, re: /\\b(quero|tenho interesse|interesse sim|pode mandar|manda mais|vamos conversar|agendar|visita|disponibilidade|qual valor|preco)\\b/ },\n  { cls: 'negativo', w: 3, re: /\\b(agora nao|depois|outro momento)\\b/ },\n  { cls: 'positivo', w: 2, re: /\\b(ok|blz|perfeito|fechado|top)\\b/ },\n];\n\nlet pos = 0;\nlet neg = 0;\nfor (const r of rules) {\n  if (r.re.test(t)) {\n    if (r.cls === 'positivo') pos += r.w;\n    if (r.cls === 'negativo') neg += r.w;\n  }\n}\n\nif (/\\bnao\\b.{0,12}\\b(quero|interesse|manda|envia|falar)\\b/.test(t)) neg += 4;\n\nlet classificacao = 'neutro';\nif (neg >= pos + 2) classificacao = 'negativo';\nelse if (pos >= neg + 2) classificacao = 'positivo';\n\nconst score = Number(Math.min(0.99, 0.55 + (Math.abs(pos - neg) / 12)).toFixed(2));\n\nconst blockOnNeg = String($env.INBOUND_BLOCK_ON_NEGATIVE || 'true').toLowerCase() === 'true';\nconst blockOnPos = String($env.INBOUND_BLOCK_ON_POSITIVE || 'false').toLowerCase() === 'true';\nconst bloquear_envio = (classificacao === 'negativo' && blockOnNeg) || (classificacao === 'positivo' && blockOnPos);\n\nreturn [{\n  json: {\n    ...$json,\n    classificacao,\n    classificacao_score: score,\n    bloquear_envio,\n    provider_status_inbound: `INBOUND_${classificacao.toUpperCase()}`,\n    erro_envio_inbound: classificacao === 'negativo' ? 'opt_out_inbound' : '',\n    processed_at_iso: new Date().toISOString(),\n  },\n}];\n"
+      },
+      "id": "c3e16e4c-3d5f-48f2-b150-3daf6c6e5eba",
+      "name": "Classificar Resposta PT-BR",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        180,
+        -260
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "read",
+        "documentId": {
+          "__rl": true,
+          "value": "={{ $env.LEADS_SHEET_ID }}",
+          "mode": "id"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "={{ $env.LEADS_SHEET_NAME || 'Leads' }}",
+          "mode": "name"
+        },
+        "filtersUI": {},
+        "options": {}
+      },
+      "id": "e8099645-4d81-4968-865b-da341b60e34a",
+      "name": "Ler Leads Google Sheets",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        400,
+        -260
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const inbound = $('Classificar Resposta PT-BR').item.json;\nconst rows = $input.all();\n\nconst normalizeText = (value) => String(value || '')\n  .normalize('NFD')\n  .replace(/[\\u0300-\\u036f]/g, '')\n  .toLowerCase()\n  .trim();\n\nconst isValidBrLocal = (digits) => {\n  if (!(digits.length === 10 || digits.length === 11)) return false;\n  const ddd = digits.slice(0, 2);\n  if (!/^[1-9][0-9]$/.test(ddd)) return false;\n  if (digits.length === 11) return digits[2] === '9';\n  return /^[2-5]/.test(digits[2]);\n};\n\nconst allowNonBr = String($env.CAMPAIGN_ALLOW_NON_BR || 'false').toLowerCase() === 'true';\nconst normalizePhone = (value) => {\n  const digits = String(value || '').replace(/\\D/g, '');\n  if (!digits) return '';\n  if (allowNonBr) return (digits.length >= 10 && digits.length <= 15) ? digits : '';\n  if (digits.startsWith('55')) {\n    const local = digits.slice(2);\n    return isValidBrLocal(local) ? digits : '';\n  }\n  return isValidBrLocal(digits) ? `55${digits}` : '';\n};\n\nconst targetPhone = normalizePhone(inbound.phone_norm || inbound.raw_jid || '');\nconst fallbackStatus = 'Nao Enviado';\n\nlet matched = null;\nfor (const item of rows) {\n  const row = item.json || {};\n  const phone = normalizePhone(row.whatsapp || row.telefone || row.celular || row.phone || row.numero);\n  if (!phone) continue;\n  if (phone !== targetPhone) continue;\n  matched = row;\n  break;\n}\n\nif (!matched) {\n  return [{\n    json: {\n      ...inbound,\n      lead_found: false,\n      orphan_reason: inbound.is_duplicate ? 'duplicado' : 'lead_nao_encontrado',\n      status_envio_atual: fallbackStatus,\n      status_envio_final: inbound.bloquear_envio ? 'Enviado' : fallbackStatus,\n      row_number: -1,\n    },\n  }];\n}\n\nconst statusAtual = String(matched.status_envio || '').trim() || fallbackStatus;\nconst statusFinal = inbound.bloquear_envio ? 'Enviado' : statusAtual;\n\nreturn [{\n  json: {\n    ...inbound,\n    ...matched,\n    lead_found: true,\n    row_number: Number(matched.row_number || -1),\n    status_envio_atual: statusAtual,\n    status_envio_final: statusFinal,\n    orphan_reason: '',\n    bloqueio_motivo: inbound.bloquear_envio ? `classificacao_${inbound.classificacao}` : '',\n    inbound_phone_norm: targetPhone,\n    inbound_nome_match: String(matched.nome || '').trim(),\n    inbound_segmento_match: normalizeText(matched.segmento || matched.categoria || ''),\n  },\n}];\n"
+      },
+      "id": "33e911c6-0103-4e0a-ab41-5a1c681d2f28",
+      "name": "Resolver Lead por Telefone",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        620,
+        -260
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 1
+          },
+          "conditions": [
+            {
+              "id": "cond-lead-found",
+              "leftValue": "={{ Boolean($json.lead_found) }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "fcdf12eb-446c-4213-82cb-ed13ec40c7e1",
+      "name": "Lead Encontrado?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        840,
+        -260
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "documentId": {
+          "__rl": true,
+          "value": "={{ $env.LEADS_SHEET_ID }}",
+          "mode": "id"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "={{ $env.LEADS_SHEET_NAME || 'Leads' }}",
+          "mode": "name"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "row_number": "={{ $json.row_number }}",
+            "status_envio": "={{ $json.status_envio_final }}",
+            "ultimo_envio_em": "={{ $json.received_at_iso }}",
+            "provider_message_id": "={{ $json.message_id }}",
+            "provider_status": "={{ $json.provider_status_inbound }}",
+            "erro_envio": "={{ $json.erro_envio_inbound }}",
+            "inbound_classe": "={{ $json.classificacao }}",
+            "inbound_score": "={{ $json.classificacao_score }}",
+            "inbound_texto": "={{ $json.text_original }}",
+            "inbound_evento": "={{ $json.event }}",
+            "inbound_dedup_key": "={{ $json.dedupe_key }}",
+            "inbound_processado_em": "={{ $json.processed_at_iso }}",
+            "bloquear_envio": "={{ $json.bloquear_envio ? 'sim' : 'nao' }}",
+            "bloqueio_motivo": "={{ $json.bloqueio_motivo }}"
+          },
+          "matchingColumns": [
+            "row_number"
+          ],
+          "schema": []
+        },
+        "options": {}
+      },
+      "id": "8e7f9be3-76aa-4eac-99d4-a8f25e1cb627",
+      "name": "Atualizar Lead Inbound (Sheets)",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        1060,
+        -340
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": {
+          "__rl": true,
+          "value": "={{ $env.LEADS_SHEET_ID }}",
+          "mode": "id"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "={{ $env.INBOUND_LOG_SHEET_NAME || 'inbound_log' }}",
+          "mode": "name"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "data_hora": "={{ $json.processed_at_iso || $json.received_at_iso }}",
+            "telefone": "={{ $json.inbound_phone_norm || $json.phone_norm }}",
+            "nome": "={{ $json.inbound_nome_match || $json.nome }}",
+            "segmento": "={{ $json.inbound_segmento_match || $json.segmento }}",
+            "classificacao": "={{ $json.classificacao || \"ignorado\" }}",
+            "score": "={{ $json.classificacao_score }}",
+            "message_id": "={{ $json.message_id }}",
+            "dedupe_key": "={{ $json.dedupe_key }}",
+            "evento": "={{ $json.event }}",
+            "texto": "={{ $json.text_original }}",
+            "status_envio_final": "={{ $json.status_envio_final }}",
+            "bloquear_envio": "={{ $json.bloquear_envio ? 'sim' : 'nao' }}",
+            "row_number": "={{ $json.row_number }}",
+            "origem": "lead_encontrado"
+          },
+          "schema": []
+        },
+        "options": {}
+      },
+      "id": "84471ecc-a55f-4657-91ae-9aa9c4fabe3e",
+      "name": "Registrar Inbound Log (Sheets)",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        1280,
+        -340
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": {
+          "__rl": true,
+          "value": "={{ $env.LEADS_SHEET_ID }}",
+          "mode": "id"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "={{ $env.INBOUND_ORPHAN_SHEET_NAME || 'inbound_orfaos' }}",
+          "mode": "name"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "data_hora": "={{ $json.processed_at_iso || $json.received_at_iso || $now.toISO() }}",
+            "telefone": "={{ $json.phone_norm }}",
+            "message_id": "={{ $json.message_id }}",
+            "evento": "={{ $json.event }}",
+            "texto": "={{ $json.text_original }}",
+            "dedupe_key": "={{ $json.dedupe_key }}",
+            "motivo": "={{ $json.orphan_reason || ($json.secret_ok === false ? \"secret_invalido\" : ($json.is_duplicate ? \"duplicado\" : ($json.is_inbound_text ? \"lead_nao_encontrado\" : \"evento_ignorado\"))) }}",
+            "classificacao": "={{ $json.classificacao }}",
+            "score": "={{ $json.classificacao_score }}",
+            "payload_json": "={{ JSON.stringify($json.raw_payload || {}) }}"
+          },
+          "schema": []
+        },
+        "options": {}
+      },
+      "id": "75a883f8-a019-4015-a8d6-dc81a1c74495",
+      "name": "Registrar Inbound Orfao (Sheets)",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        1060,
+        -40
+      ]
+    }
+  ],
+  "connections": {
+    "Webhook Inbound Evolution": {
+      "main": [
+        [
+          {
+            "node": "Normalizar Evento Inbound",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalizar Evento Inbound": {
+      "main": [
+        [
+          {
+            "node": "Evento Elegivel?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Evento Elegivel?": {
+      "main": [
+        [
+          {
+            "node": "Deduplicar Evento (TTL)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Registrar Inbound Orfao (Sheets)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Deduplicar Evento (TTL)": {
+      "main": [
+        [
+          {
+            "node": "Ja Processado?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Ja Processado?": {
+      "main": [
+        [
+          {
+            "node": "Registrar Inbound Orfao (Sheets)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Classificar Resposta PT-BR",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Classificar Resposta PT-BR": {
+      "main": [
+        [
+          {
+            "node": "Ler Leads Google Sheets",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Ler Leads Google Sheets": {
+      "main": [
+        [
+          {
+            "node": "Resolver Lead por Telefone",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Resolver Lead por Telefone": {
+      "main": [
+        [
+          {
+            "node": "Lead Encontrado?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Lead Encontrado?": {
+      "main": [
+        [
+          {
+            "node": "Atualizar Lead Inbound (Sheets)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Registrar Inbound Orfao (Sheets)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Atualizar Lead Inbound (Sheets)": {
+      "main": [
+        [
+          {
+            "node": "Registrar Inbound Log (Sheets)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": false
+  },
+  "pinData": {}
+}

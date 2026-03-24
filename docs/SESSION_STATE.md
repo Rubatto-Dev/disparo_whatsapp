@@ -1,46 +1,75 @@
 # Session State
 
 ## Last update
-- Date: 2026-03-11 13:10 -03:00
+- Date: 2026-03-24 10:12:29 -03
 - Updated by: Codex
 
 ## Project context
 - Repository: `disparo_whatsapp`
-- Workflow id (n8n): `OUAfQLqhMta3uqPE`
+- Workflow id (n8n): `O7QqXPaqJ9vnYy5J`
 - Goal: disparo WhatsApp para `corretores/parceiros` com anti-ban.
-- Status: **organizado para teste e producao**, com envio em massa sob trava.
+- Status: **operacao de parceiros/corretores em andamento**, com limpeza de grupos fora de escopo concluida.
 
 ## Canonical operational set
-- Runtime: `docker-compose.yml`, `.env`, `workflow_planilha_whatsapp_teste.json`, base em `saida/`
-- Optional runtime (Google): `workflow_hogar_evolution.json`
+- Runtime efetivo atual: `/home/rubatto-dev/docker/n8n/docker-compose.yml` + `.env` (symlink para `disparo_whatsapp/.env`)
+- Runtime secundario: `disparo_whatsapp/docker-compose.yml` (stack unificada com Evolution local)
+- Workflow operacional: `workflow_google_sheets_status.json` (Google Sheets com controle de status)
 - Validation/support: `scripts/` e `docs/`
 
-## Live workflow status (CSV local)
-- Audience forced: `parceiros`
-- 4 variacoes aleatorias ativas
-- Quebra de linha real ativa
-- Personalizacao por nome ativa
-- Simulacao de digitando ativa (`CAMPAIGN_TYPING_*`)
-- Delay variavel + long break ativos
-- Kill switch anti-ban ativo
-- Safety gate ativo por `CAMPAIGN_SEND_LOCK`
+## Live workflow status (Google Sheets)
+- Audience configurada: `parceiros`
+- Modo de envio: real (`CAMPAIGN_DRY_RUN=false`)
+- Trava de envio: liberada (`CAMPAIGN_SEND_LOCK=false`)
+- Numero forcado para teste: `5562983002992` (`CAMPAIGN_FORCE_PHONE`)
+- Lote atual de teste: `CAMPAIGN_MAX_CONTACTS=1`
+- Campanha atual: `CAMPAIGN_ID=campanha_2026_03_17_teste_controlado`
+- Filtro de status: `CAMPAIGN_STATUS_FILTER=nao_enviado`
 
-## Critical fix applied in this session
-- Alinhado caminho de persistencia CSV no node `Filtrar Contatos Validos` para usar o mesmo criterio do node de leitura (`/home/node/.n8n-files/...`), evitando divergencia entre leitura e escrita.
+## Changes applied in this session
+- `.env` ajustado para producao de parceiros:
+  - `CAMPAIGN_AUDIENCE=parceiros`
+  - `CAMPAIGN_FORCE_PHONE=` (vazio)
+  - `CAMPAIGN_MAX_CONTACTS=20`
+  - `CAMPAIGN_ID=campanha_2026_03_17_parceiros`
+- `n8n` recriado com sucesso para carregar variaveis atualizadas.
+- Planilha `Leads` (Google Sheets) teve reset de status para parceiros/corretores que estavam `Enviado`:
+  - 3 linhas de parceiros alteradas para `Nao Enviado`
+  - limpeza de campos de rastreio (`ultimo_envio_em`, `provider_message_id`, `provider_status`, `erro_envio`) nessas mesmas linhas
+- Limpeza de grupos fora de escopo concluida na planilha `Leads`:
+  - grupos removidos: `FAZENDAS DE LUXO` e `MILFAZENDAS.com.br`
+  - linhas removidas nesta etapa: `260`
+  - base final apos limpeza: `5858` leads
+- Workflow `Disparo WhatsApp - Google Sheets (com controle de status)` ajustado para ordem linear:
+  - removida priorizacao por contato com nome/@
+  - removida ordenacao por score de validacao
+  - agora o envio respeita a ordem original da planilha (de cima para baixo), apos filtros tecnicos obrigatorios
+- Novo workflow inbound criado no repositorio: `workflow_inbound_whatsapp_google_sheets.json`
+  - trigger por `Webhook` (`INBOUND_WEBHOOK_PATH`)
+  - deduplicacao com TTL em `Workflow Static Data` (`INBOUND_DEDUPE_*`)
+  - classificacao PT-BR (`positivo`, `negativo`, `neutro`)
+  - update de `Leads` por `row_number` com colunas `inbound_*` e `bloquear_envio`
+  - append em abas de log inbound (`INBOUND_LOG_SHEET_NAME` e `INBOUND_ORPHAN_SHEET_NAME`)
 
 ## Validation results
 - `docker compose config -q`: OK
-- JSON de workflows: OK
-- `python -m py_compile` scripts: OK
-- links de docs: OK
+- `docker exec n8n env` (vars de campanha): OK
+- `fetchInstances` Evolution: instancia `hogar-luxo` aberta com owner `556294594641`
+- reset Google Sheets parceiros: OK (`sent_partner` de 3 para 0)
+- limpeza dos grupos fazendas: OK (`matches remaining: 0`)
+- `workflow_inbound_whatsapp_google_sheets.json`: JSON valido (`jq empty`)
 
 ## MCP status
-- `sequential-thinking`: ativo e em uso
-- `context7`: configurado como `context7-mcp.cmd`; runtime MCP ainda com timeout de handshake em 10s nesta sessao
+- `sequential-thinking`: ativo e utilizado
+- `context7`: ativo e utilizado
 - `n8n`, `playwright`, `google-sheets`: registrados
 
-## Launch runbook (when supervisor is present)
-1. `CAMPAIGN_SEND_LOCK=false`
-2. `CAMPAIGN_DRY_RUN=false`
-3. opcional teste controlado: `CAMPAIGN_FORCE_PHONE=5562994594641`
-4. executar e monitorar kill switch/logs
+## Pending decision
+- Definir momento de voltar de `teste controlado` para `go-live em lote`:
+  1. limpar `CAMPAIGN_FORCE_PHONE`
+  2. subir `CAMPAIGN_MAX_CONTACTS` para lote de producao
+  3. atualizar `CAMPAIGN_ID` para campanha de producao
+
+## Next steps (immediate)
+1. Executar 1 teste controlado com destino forcado (`5562983002992`) e validar entrega.
+2. Se OK, preparar virada para lote de producao (remover force phone + aumentar max contacts).
+3. Monitorar kill switch, provider e status na planilha apos cada lote.

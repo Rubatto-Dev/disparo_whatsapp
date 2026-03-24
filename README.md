@@ -6,7 +6,7 @@ O projeto nao e um app web tradicional. Ele e um pacote de operacao com tres blo
 
 1. Scripts Python para consolidar exportacoes de contatos e preparar CSVs de trabalho.
 2. Infra local via Docker Compose para rodar n8n e Evolution API.
-3. Workflows n8n em JSON para dois modos oficialmente suportados.
+3. Workflows n8n em JSON para tres modos oficialmente suportados.
 
 ## Estado do repositorio
 
@@ -57,12 +57,24 @@ Modo mais estruturado para operacao com planilha online e geracao de mensagem co
 
 Uso indicado quando o time quer rastreabilidade por status/log em planilha.
 
+### 3. Inbound Webhook + Google Sheets
+
+Modo para tratar respostas recebidas dos contatos.
+
+- Workflow: `workflow_inbound_whatsapp_google_sheets.json`
+- Credenciais: Google Sheets OAuth2 no n8n
+- Variaveis principais: `INBOUND_*`
+- Funcionalidades: deduplicacao de evento, classificacao PT-BR (`positivo/negativo/neutro`), update da aba `Leads`, log de orfaos
+
+Uso indicado quando o time quer bloquear novos disparos apos resposta negativa e manter trilha inbound.
+
 ## Estrutura do projeto
 
 ```text
 .
 |-- docker-compose.yml
 |-- workflow_hogar_evolution.json
+|-- workflow_inbound_whatsapp_google_sheets.json
 |-- workflow_planilha_whatsapp_teste.json
 |-- scripts/
 |-- docs/
@@ -77,6 +89,7 @@ Uso indicado quando o time quer rastreabilidade por status/log em planilha.
 - `docker-compose.yml`
 - `.env` (local, nao versionado)
 - `workflow_planilha_whatsapp_teste.json` (fluxo CSV local)
+- `workflow_inbound_whatsapp_google_sheets.json` (fluxo inbound webhook)
 - `saida/` com base de contatos
 
 ### Validacao e apoio operacional
@@ -165,7 +178,7 @@ Gera uma versao `.xlsx` visual da planilha segmentada com validacoes e destaque 
 - O n8n mantem dados importantes em volume persistente; preserve o volume `n8n_data` entre reinicializacoes.
 - Para importar workflows no n8n, use o menu de tres pontos no Editor e escolha `Import from File`.
 - Nunca publique `.env`, `google_token.json`, planilhas exportadas ou CSVs gerados.
-- O projeto foi reduzido para dois caminhos oficiais. Todo o restante foi tratado como legado e removido do repositorio.
+- O projeto foi reduzido para tres caminhos oficiais (CSV local, Google Sheets+IA, e inbound webhook). Todo o restante foi tratado como legado e removido do repositorio.
 
 ## Proximos passos antes de operacao real
 
