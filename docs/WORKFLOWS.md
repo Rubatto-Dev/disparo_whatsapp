@@ -109,6 +109,14 @@ Funcao:
 - reimporta os leads em uma planilha ja existente
 - usa `LEADS_SHEET_ID` do `.env` ou argumento manual
 
+### `scripts/test_inbound_workflow_logic.js`
+
+Funcao:
+
+- valida localmente a logica dos nos inbound de deduplicacao e classificacao PT-BR
+- carrega os snippets direto de `workflow_inbound_whatsapp_google_sheets.json`
+- executa cenarios de regressao e retorna erro de processo se alguma regra quebrar
+
 ### `scripts/formatar_planilha_visual.ps1`
 
 Funcao:

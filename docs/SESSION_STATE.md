@@ -1,7 +1,7 @@
 # Session State
 
 ## Last update
-- Date: 2026-03-24 10:32:40 -03
+- Date: 2026-03-24 11:04:49 -03
 - Updated by: Codex
 
 ## Project context
@@ -55,6 +55,10 @@
   - classificador PT-BR reforcado para reduzir falso negativo/falso positivo em respostas ambiguas
 - Nova spec tecnica criada:
   - `docs/specs/SPEC-2026-03-24-INBOUND-N8N-IMPLEMENTACAO-DETALHADA.md`
+- Script de validacao inbound adicionado:
+  - `scripts/test_inbound_workflow_logic.js`
+  - testa localmente classificacao PT-BR e deduplicacao usando os snippets do JSON do workflow inbound
+- Runbook e README atualizados com passo de smoke test inbound (script + replay webhook)
 
 ## Validation results
 - `docker compose config -q`: OK
@@ -64,6 +68,7 @@
 - limpeza dos grupos fazendas: OK (`matches remaining: 0`)
 - `workflow_inbound_whatsapp_google_sheets.json`: JSON valido (`jq empty`)
 - snippets JS inbound (`Deduplicar Evento (TTL)` e `Classificar Resposta PT-BR`): sintaxe valida (`node -e` + `new Function`)
+- `node scripts/test_inbound_workflow_logic.js`: OK
 
 ## MCP status
 - `sequential-thinking`: ativo e utilizado

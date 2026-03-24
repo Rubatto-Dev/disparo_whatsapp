@@ -130,6 +130,39 @@ Recrie o container do n8n:
 docker compose up -d --force-recreate n8n
 ```
 
+## Smoke test inbound
+
+Antes de ativar o webhook inbound em producao, rode dois checks:
+
+1. Teste logico local do workflow (classificacao PT-BR + dedupe):
+
+```bash
+node scripts/test_inbound_workflow_logic.js
+```
+
+2. Replay de payload no webhook (container local):
+
+```bash
+curl -sS -X POST "http://localhost:5678/webhook/evolution/inbound" \
+  -H "Content-Type: application/json" \
+  -H "x-inbound-secret: ${INBOUND_WEBHOOK_SECRET}" \
+  -d '{
+    "event": "messages.upsert",
+    "data": {
+      "key": {
+        "id": "smoke-001",
+        "fromMe": false,
+        "remoteJid": "5511999999999@s.whatsapp.net"
+      },
+      "message": {
+        "conversation": "nao tenho interesse"
+      }
+    }
+  }'
+```
+
+Se o workflow estiver no modo de teste do editor n8n, use `/webhook-test/<path>` em vez de `/webhook/<path>`.
+
 ## Seguranca operacional
 
 Nunca faca:

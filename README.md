@@ -65,6 +65,7 @@ Modo para tratar respostas recebidas dos contatos.
 - Credenciais: Google Sheets OAuth2 no n8n
 - Variaveis principais: `INBOUND_*`
 - Funcionalidades: deduplicacao de evento, classificacao PT-BR (`positivo/negativo/neutro`), update da aba `Leads`, log de orfaos
+- Teste automatizado local: `node scripts/test_inbound_workflow_logic.js`
 
 Uso indicado quando o time quer bloquear novos disparos apos resposta negativa e manter trilha inbound.
 
