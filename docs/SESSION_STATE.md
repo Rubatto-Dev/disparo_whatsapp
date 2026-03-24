@@ -1,7 +1,7 @@
 # Session State
 
 ## Last update
-- Date: 2026-03-24 10:12:29 -03
+- Date: 2026-03-24 10:32:40 -03
 - Updated by: Codex
 
 ## Project context
@@ -49,6 +49,12 @@
   - classificacao PT-BR (`positivo`, `negativo`, `neutro`)
   - update de `Leads` por `row_number` com colunas `inbound_*` e `bloquear_envio`
   - append em abas de log inbound (`INBOUND_LOG_SHEET_NAME` e `INBOUND_ORPHAN_SHEET_NAME`)
+- Ajuste de robustez no inbound:
+  - dedupe migrado para `inbound_dedupe_v2` com chave combinada (`message_id` + texto em janela temporal)
+  - checagem de bucket atual e bucket anterior para reduzir duplicidade em borda de janela
+  - classificador PT-BR reforcado para reduzir falso negativo/falso positivo em respostas ambiguas
+- Nova spec tecnica criada:
+  - `docs/specs/SPEC-2026-03-24-INBOUND-N8N-IMPLEMENTACAO-DETALHADA.md`
 
 ## Validation results
 - `docker compose config -q`: OK
@@ -57,6 +63,7 @@
 - reset Google Sheets parceiros: OK (`sent_partner` de 3 para 0)
 - limpeza dos grupos fazendas: OK (`matches remaining: 0`)
 - `workflow_inbound_whatsapp_google_sheets.json`: JSON valido (`jq empty`)
+- snippets JS inbound (`Deduplicar Evento (TTL)` e `Classificar Resposta PT-BR`): sintaxe valida (`node -e` + `new Function`)
 
 ## MCP status
 - `sequential-thinking`: ativo e utilizado

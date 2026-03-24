@@ -66,6 +66,10 @@ Objetivo:
 - classificar resposta PT-BR (`positivo`, `negativo`, `neutro`)
 - atualizar status na aba `Leads` e registrar logs inbound
 
+Detalhamento tecnico:
+
+- `docs/specs/SPEC-2026-03-24-INBOUND-N8N-IMPLEMENTACAO-DETALHADA.md`
+
 Dependencias:
 
 - Google Sheets OAuth2 no n8n
