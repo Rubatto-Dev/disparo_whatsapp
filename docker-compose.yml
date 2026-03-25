@@ -179,6 +179,38 @@ services:
     networks:
       - app_net
 
+  # --- Evolution Observer (watcher de status/QR/alertas) ---
+  evolution_observer:
+    image: alpine:3.20
+    container_name: evolution_observer
+    restart: unless-stopped
+    environment:
+      INSTANCE: ${EVOLUTION_INSTANCE}
+      API_KEY: ${EVOLUTION_API_KEY:-}
+      BASE_URL: http://evolution_api:8080
+      POLL_SECONDS: ${OBSERVER_POLL_SECONDS:-20}
+      QR_REFRESH_COOLDOWN: ${OBSERVER_QR_REFRESH_COOLDOWN:-90}
+      OUT_DIR: /workspace/tmp_observer
+
+      ALERT_PREFIX: ${ALERT_PREFIX:-[Evolution Observer]}
+      ALERT_NOTIFY_ON_OPEN: ${ALERT_NOTIFY_ON_OPEN:-true}
+      ALERT_NOTIFY_ON_CONNECTING: ${ALERT_NOTIFY_ON_CONNECTING:-true}
+      ALERT_NOTIFY_ON_CLOSE: ${ALERT_NOTIFY_ON_CLOSE:-true}
+      ALERT_DOWN_REMINDER_ENABLED: ${ALERT_DOWN_REMINDER_ENABLED:-true}
+      ALERT_DOWN_REMINDER_COOLDOWN: ${ALERT_DOWN_REMINDER_COOLDOWN:-900}
+      ALERT_WEBHOOK_URL: ${ALERT_WEBHOOK_URL:-}
+      ALERT_SLACK_WEBHOOK_URL: ${ALERT_SLACK_WEBHOOK_URL:-}
+      ALERT_TELEGRAM_BOT_TOKEN: ${ALERT_TELEGRAM_BOT_TOKEN:-}
+      ALERT_TELEGRAM_CHAT_ID: ${ALERT_TELEGRAM_CHAT_ID:-}
+    command: sh -lc "apk add --no-cache bash curl jq >/dev/null && bash /workspace/scripts/evolution_instance_observer.sh"
+    volumes:
+      - ./scripts:/workspace/scripts:ro
+      - ./tmp_observer:/workspace/tmp_observer
+    networks:
+      - app_net
+    depends_on:
+      - evolution_api
+
 volumes:
   n8n_data:
   evolution_instances:

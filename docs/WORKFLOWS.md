@@ -117,6 +117,14 @@ Funcao:
 - carrega os snippets direto de `workflow_inbound_whatsapp_google_sheets.json`
 - executa cenarios de regressao e retorna erro de processo se alguma regra quebrar
 
+### `scripts/evolution_instance_observer.sh`
+
+Funcao:
+
+- monitora o status da instancia Evolution (`fetchInstances`) em polling
+- renova QR quando a instancia nao esta `open`
+- dispara alerta externo opcional via webhook genérico, Slack ou Telegram (`ALERT_*`)
+
 ### `scripts/formatar_planilha_visual.ps1`
 
 Funcao:
@@ -134,6 +142,7 @@ Stack principal:
 - `evolution_api`
 - `evolution_postgres`
 - `evolution_redis`
+- `evolution_observer` (opcional, monitoramento/alertas)
 
 ## Arquivos locais nao versionados
 

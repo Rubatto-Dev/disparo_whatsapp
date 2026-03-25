@@ -78,6 +78,18 @@ Durante a operacao, observe:
 - tempo medio entre envios
 - erros de autenticacao, rate limit e timeout
 
+Observer opcional da Evolution (rodar em terminal separado):
+
+```bash
+bash scripts/evolution_instance_observer.sh
+```
+
+Ou via serviço dedicado no compose:
+
+```bash
+docker compose up -d evolution_observer
+```
+
 ## Rollback
 
 Se algo sair do esperado:

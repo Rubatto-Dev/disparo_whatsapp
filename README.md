@@ -1,6 +1,6 @@
 # Disparo WhatsApp
 
-Repositorio operacional para preparar bases de contatos, subir a stack local (`n8n + Evolution API + PostgreSQL + Redis`) e executar workflows de disparo controlado no WhatsApp.
+Repositorio operacional para preparar bases de contatos, subir a stack local (`n8n + Evolution API + PostgreSQL + Redis`, com `evolution_observer` opcional) e executar workflows de disparo controlado no WhatsApp.
 
 O projeto nao e um app web tradicional. Ele e um pacote de operacao com tres blocos:
 
@@ -164,6 +164,16 @@ powershell -ExecutionPolicy Bypass -File scripts/formatar_planilha_visual.ps1
 ```
 
 Gera uma versao `.xlsx` visual da planilha segmentada com validacoes e destaque de campos operacionais.
+
+## Script de observabilidade (Shell)
+
+### Monitorar status da instancia Evolution e alertas externos
+
+```bash
+bash scripts/evolution_instance_observer.sh
+```
+
+O script usa `EVOLUTION_*` e `ALERT_*` do `.env` (ou variaveis exportadas no shell).
 
 ## Documentacao
 

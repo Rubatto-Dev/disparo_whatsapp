@@ -1,7 +1,7 @@
 # Session State
 
 ## Last update
-- Date: 2026-03-24 11:04:49 -03
+- Date: 2026-03-24 15:57:26 -03
 - Updated by: Codex
 
 ## Project context
@@ -59,6 +59,15 @@
   - `scripts/test_inbound_workflow_logic.js`
   - testa localmente classificacao PT-BR e deduplicacao usando os snippets do JSON do workflow inbound
 - Runbook e README atualizados com passo de smoke test inbound (script + replay webhook)
+- Ajuste de seguranca no observer Evolution:
+  - `scripts/evolution_instance_observer.sh` sem default hardcoded para API key
+  - observer agora encerra com erro explicito quando `EVOLUTION_API_KEY/API_KEY` nao estiver definido
+- Documentacao de observer atualizada:
+  - `.env.example` com variaveis `ALERT_*`
+  - `docs/ENVIRONMENT.md`, `docs/WORKFLOWS.md`, `docs/RUNBOOK.md` e `README.md`
+- Compose observer alinhado:
+  - novo servico opcional `evolution_observer` no `docker-compose.yml`
+  - removido fallback hardcoded para `EVOLUTION_API_KEY` no compose
 
 ## Validation results
 - `docker compose config -q`: OK
@@ -69,6 +78,9 @@
 - `workflow_inbound_whatsapp_google_sheets.json`: JSON valido (`jq empty`)
 - snippets JS inbound (`Deduplicar Evento (TTL)` e `Classificar Resposta PT-BR`): sintaxe valida (`node -e` + `new Function`)
 - `node scripts/test_inbound_workflow_logic.js`: OK
+- `bash -n scripts/evolution_instance_observer.sh`: OK
+- observer sem API key retorna falha segura (`exit_code=1`): OK
+- `docker compose config -q`: OK (com `evolution_observer`)
 
 ## MCP status
 - `sequential-thinking`: ativo e utilizado
