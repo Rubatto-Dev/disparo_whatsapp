@@ -1,7 +1,7 @@
 # Session State
 
 ## Last update
-- Date: 2026-03-24 15:57:26 -03
+- Date: 2026-03-25 08:49:08 -03
 - Updated by: Codex
 
 ## Project context
@@ -68,6 +68,10 @@
 - Compose observer alinhado:
   - novo servico opcional `evolution_observer` no `docker-compose.yml`
   - removido fallback hardcoded para `EVOLUTION_API_KEY` no compose
+- Workflows de disparo (`workflow_google_sheets_status.json` e `workflow_planilha_whatsapp_teste.json`) consolidados:
+  - `Filtrar Contatos Validos`: mantida ordem linear da planilha sem reordenacao por score de validacao
+  - `Controle Kill Switch`: contagem de erros consecutivos em runtime (`workflow static data`) com tolerancia para erros isolados de rede
+  - metadados adicionais no fluxo (`consecutive_errors`, `kill_switch_threshold`, `runtime_key`) para observabilidade
 
 ## Validation results
 - `docker compose config -q`: OK
@@ -81,6 +85,8 @@
 - `bash -n scripts/evolution_instance_observer.sh`: OK
 - observer sem API key retorna falha segura (`exit_code=1`): OK
 - `docker compose config -q`: OK (com `evolution_observer`)
+- `workflow_google_sheets_status.json` e `workflow_planilha_whatsapp_teste.json`: JSON valido (`jq empty`)
+- smoke de `Controle Kill Switch` nos dois workflows: OK (para no 3o erro consecutivo nao-rede)
 
 ## MCP status
 - `sequential-thinking`: ativo e utilizado
